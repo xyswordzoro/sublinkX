@@ -51,21 +51,6 @@ function fmtDate(d) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 function num(n) { return (n || 0).toLocaleString('en-US'); }
-function fmtCompact(n) {
-  n = n || 0;
-  if (n >= 10000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-  return String(n);
-}
-function relTime(iso) {
-  var t = new Date(iso);
-  if (isNaN(t.getTime())) return '';
-  var diff = (Date.now() - t.getTime()) / 1000;
-  if (diff < 60) return '刚刚';
-  if (diff < 3600) return Math.floor(diff / 60) + ' 分钟前';
-  if (diff < 86400) return Math.floor(diff / 3600) + ' 小时前';
-  return Math.floor(diff / 86400) + ' 天前';
-}
 var chartUid = 0;
 
 /* MD5（用于生成订阅 token，与后端 md5(订阅名) 匹配） */
@@ -245,12 +230,8 @@ async function enterApp() {
     state.version = v.data || '';
   } catch (e) { state.version = ''; }
   var nick = state.me.nickname || '管理员';
-  $('#side-username').textContent = state.me.username || 'admin';
-  $('#side-nickname').textContent = nick;
-  applyAvatar('side-avatar', state.me);
   applyAvatar('top-avatar', state.me);
   $('#top-uname').textContent = nick;
-  $('#side-ver').textContent = 'v' + (state.version || '2.1');
   $('#login-view').hidden = true;
   $('#app-view').hidden = false;
   if (!location.hash) location.hash = '#/dashboard';
@@ -308,86 +289,6 @@ function sparkline(values, colorVar) {
     '</svg>';
 }
 
-function multiChart(labels, series, W, H) {
-  W = W || 640; H = H || 260;
-  var padL = 46, padR = 14, padT = 14, padB = 30;
-  var n = labels.length;
-  var max = 1;
-  series.forEach(function (s) { s.values.forEach(function (v) { if (v > max) max = v; }); });
-  var step = (W - padL - padR) / Math.max(1, n - 1);
-  function X(i) { return padL + i * step; }
-  function Y(v) { return padT + (1 - v / max) * (H - padT - padB); }
-  var defs = '', content = '';
-  series.forEach(function (s, si) {
-    var gid = 'mc' + (++chartUid);
-    defs += '<linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0" stop-color="' + s.color + '" stop-opacity=".26"/>' +
-      '<stop offset="1" stop-color="' + s.color + '" stop-opacity="0"/></linearGradient>';
-    var pts = s.values.map(function (v, i) { return X(i).toFixed(1) + ',' + Y(v).toFixed(1); });
-    content += '<path d="M' + pts.join(' L') + ' L' + X(n - 1).toFixed(1) + ',' + Y(0) + ' L' + X(0).toFixed(1) + ',' + Y(0) + ' Z" fill="url(#' + gid + ')"/>';
-    content += '<path d="M' + pts.join(' L') + '" fill="none" stroke="' + s.color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
-    var last = s.values[n - 1];
-    content += '<circle cx="' + X(n - 1).toFixed(1) + '" cy="' + Y(last).toFixed(1) + '" r="3.5" fill="' + s.color + '"/>';
-  });
-  var grid = '', ticks = 4;
-  for (var t = 0; t <= ticks; t++) {
-    var v = max * t / ticks, y = Y(v);
-    grid += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y + '" y2="' + y + '" stroke="var(--border)" stroke-width="1"/>' +
-      '<text x="' + (padL - 8) + '" y="' + (y + 4) + '" text-anchor="end" font-size="11" fill="var(--muted)">' + fmtCompact(Math.round(v)) + '</text>';
-  }
-  var xlabels = '';
-  var every = Math.max(1, Math.ceil(n / 7));
-  labels.forEach(function (l, i) {
-    if (i % every !== 0 && i !== n - 1) return;
-    var anchor = 'middle';
-    if (i === 0) anchor = 'start';
-    else if (i === n - 1) anchor = 'end';
-    xlabels += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="' + anchor + '" font-size="11" fill="var(--muted)">' + esc(l) + '</text>';
-  });
-  return '<svg id="trend-svg" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block" role="img" aria-label="订阅访问趋势图">' +
-    '<defs>' + defs + '</defs>' + grid + content + xlabels +
-    '<line id="trend-cross" y1="' + padT + '" y2="' + (H - padB) + '" stroke="var(--muted)" stroke-width="1" opacity="0"/>' +
-    '<rect id="trend-overlay" x="' + padL + '" y="' + padT + '" width="' + (W - padL - padR) + '" height="' + (H - padT - padB) + '" fill="transparent"/>' +
-    '</svg>';
-}
-
-function mountTrend(labels, series) {
-  var wrap = $('#trend-wrap');
-  if (!wrap) return;
-  var svg = wrap.querySelector('#trend-svg');
-  var tip = $('#trend-tip');
-  var cross = wrap.querySelector('#trend-cross');
-  var W = 640, padL = 46, padR = 14;
-  var n = labels.length;
-  var step = (W - padL - padR) / Math.max(1, n - 1);
-  function move(e) {
-    var rect = svg.getBoundingClientRect();
-    var xr = (e.clientX - rect.left) / rect.width * W;
-    var idx = Math.round((xr - padL) / step);
-    if (idx < 0) idx = 0;
-    if (idx > n - 1) idx = n - 1;
-    var x = padL + idx * step;
-    cross.setAttribute('x1', x);
-    cross.setAttribute('x2', x);
-    cross.setAttribute('opacity', '1');
-    var rows = series.map(function (s) {
-      return '<div class="tip-row"><i class="tip-dot" style="background:' + s.color + '"></i>' + esc(s.name) + ' <b style="margin-left:auto">' + num(s.values[idx]) + '</b></div>';
-    }).join('');
-    tip.innerHTML = '<b>' + esc(labels[idx]) + '</b>' + rows;
-    var px = (x / W) * rect.width;
-    var flip = px > rect.width - 150;
-    tip.style.left = (px + (flip ? -14 : 14)) + 'px';
-    tip.style.transform = flip ? 'translateX(-100%)' : 'none';
-    tip.hidden = false;
-  }
-  function leave() {
-    tip.hidden = true;
-    cross.setAttribute('opacity', '0');
-  }
-  wrap.addEventListener('mousemove', move);
-  wrap.addEventListener('mouseleave', leave);
-}
-
 function donut(segments, centerLabel) {
   var R = 54, C = 2 * Math.PI * R;
   var total = segments.reduce(function (s, x) { return s + x.value; }, 0);
@@ -422,6 +323,66 @@ function kpiCard(cfg) {
     '</section>';
 }
 
+/* 节点地区识别：优先旗帜 emoji，其次名称关键词 */
+var REGIONS = [
+  ['香港', 'HK'], ['Hong Kong', 'HK'], ['HongKong', 'HK'], ['HK', 'HK'], ['港', 'HK'],
+  ['台湾', 'TW'], ['Taiwan', 'TW'], ['TW', 'TW'], ['台', 'TW'],
+  ['日本', 'JP'], ['Japan', 'JP'], ['JP', 'JP'],
+  ['新加坡', 'SG'], ['Singapore', 'SG'], ['狮城', 'SG'], ['SG', 'SG'],
+  ['韩国', 'KR'], ['Korea', 'KR'], ['KR', 'KR'],
+  ['美国', 'US'], ['United States', 'US'], ['USA', 'US'], ['US', 'US'], ['美', 'US'],
+  ['英国', 'GB'], ['United Kingdom', 'GB'], ['UK', 'GB'], ['GB', 'GB'],
+  ['德国', 'DE'], ['Germany', 'DE'], ['DE', 'DE'],
+  ['法国', 'FR'], ['France', 'FR'], ['FR', 'FR'],
+  ['加拿大', 'CA'], ['Canada', 'CA'], ['CA', 'CA'],
+  ['澳大利亚', 'AU'], ['Australia', 'AU'], ['澳洲', 'AU'], ['AU', 'AU'],
+  ['土耳其', 'TR'], ['Turkey', 'TR'], ['TR', 'TR'],
+  ['俄罗斯', 'RU'], ['Russia', 'RU'], ['RU', 'RU'],
+  ['荷兰', 'NL'], ['Netherlands', 'NL'], ['NL', 'NL'],
+  ['菲律宾', 'PH'], ['Philippines', 'PH'], ['PH', 'PH'],
+  ['马来西亚', 'MY'], ['Malaysia', 'MY'], ['MY', 'MY'],
+  ['泰国', 'TH'], ['Thailand', 'TH'], ['TH', 'TH'],
+  ['越南', 'VN'], ['Vietnam', 'VN'], ['VN', 'VN'],
+  ['印度尼西亚', 'ID'], ['印尼', 'ID'], ['Indonesia', 'ID'], ['ID', 'ID'],
+  ['印度', 'IN'], ['India', 'IN'], ['IN', 'IN'],
+  ['意大利', 'IT'], ['Italy', 'IT'], ['IT', 'IT'],
+  ['西班牙', 'ES'], ['Spain', 'ES'], ['ES', 'ES'],
+  ['乌克兰', 'UA'], ['Ukraine', 'UA'], ['UA', 'UA'],
+  ['巴西', 'BR'], ['Brazil', 'BR'], ['BR', 'BR'],
+  ['阿根廷', 'AR'], ['Argentina', 'AR'], ['AR', 'AR'],
+  ['瑞典', 'SE'], ['Sweden', 'SE'], ['SE', 'SE'],
+  ['瑞士', 'CH'], ['Switzerland', 'CH'], ['CH', 'CH']
+];
+var CN_NAMES = {
+  HK: '香港', TW: '台湾', JP: '日本', SG: '新加坡', KR: '韩国', US: '美国',
+  GB: '英国', DE: '德国', FR: '法国', CA: '加拿大', AU: '澳大利亚', TR: '土耳其',
+  RU: '俄罗斯', NL: '荷兰', PH: '菲律宾', MY: '马来西亚', TH: '泰国', VN: '越南',
+  ID: '印尼', IN: '印度', IT: '意大利', ES: '西班牙', UA: '乌克兰', BR: '巴西',
+  AR: '阿根廷', SE: '瑞典', CH: '瑞士'
+};
+var FLAG_RE = /([\uD83C][\uDDE6-\uDDFF])([\uD83C][\uDDE6-\uDDFF])/;
+
+function flagEmoji(code) {
+  return String.fromCharCode(0x1F1E6 + code.charCodeAt(0) - 65,
+    0x1F1E6 + code.charCodeAt(1) - 65);
+}
+
+function detectRegion(name) {
+  var flag = name.match(FLAG_RE);
+  if (flag) {
+    return String.fromCharCode(flag[1].charCodeAt(1) - 0xDDE6 + 65) +
+      String.fromCharCode(flag[2].charCodeAt(1) - 0xDDE6 + 65);
+  }
+  var upper = name.toUpperCase();
+  for (var i = 0; i < REGIONS.length; i++) {
+    var kw = REGIONS[i][0];
+    if (name.indexOf(kw) >= 0 || upper.indexOf(kw.toUpperCase()) >= 0) {
+      return REGIONS[i][1];
+    }
+  }
+  return null;
+}
+
 async function renderDashboard() {
   var view = $('#view');
   view.innerHTML = '<div class="loading">加载中…</div>';
@@ -434,74 +395,56 @@ async function renderDashboard() {
     setNavCounts();
   } catch (e) { view.innerHTML = errorBox(e.message); return; }
 
-  var range = state.range;
   var todayStr = fmtDate(new Date());
   var yd = new Date(); yd.setDate(yd.getDate() - 1);
   var ydStr = fmtDate(yd);
   var weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
 
-  /* 日序列 */
-  var days = [], i, d;
-  for (i = range - 1; i >= 0; i--) {
+  /* 近 7 天请求序列 + 今日/昨日计数 */
+  var todayCount = 0, ydCount = 0;
+  var dailyReq = [];
+  var i, d;
+  for (i = 6; i >= 0; i--) {
     d = new Date(); d.setDate(d.getDate() - i);
-    days.push({ key: fmtDate(d), label: (d.getMonth() + 1) + '/' + d.getDate(), req: 0, ips: new Set(), newNode: 0 });
+    dailyReq.push({ key: fmtDate(d), v: 0 });
   }
   var dayMap = {};
-  days.forEach(function (x) { dayMap[x.key] = x; });
-
-  var allLogs = [];
+  dailyReq.forEach(function (x) { dayMap[x.key] = x; });
   subs.forEach(function (sub) {
     (sub.SubLogs || []).forEach(function (l) {
-      var entry = { ip: l.IP, addr: l.Addr, date: l.Date || '', count: l.Count || 0, sub: sub.Name };
-      allLogs.push(entry);
-      var hit = dayMap[entry.date.slice(0, 10)];
-      if (hit) { hit.req += entry.count; hit.ips.add(entry.ip); }
+      var day = (l.Date || '').slice(0, 10);
+      var hit = dayMap[day];
+      if (hit) hit.v += (l.Count || 0);
+      if (day === todayStr) todayCount += (l.Count || 0);
+      if (day === ydStr) ydCount += (l.Count || 0);
     });
   });
+  var dailyReqVals = dailyReq.map(function (x) { return x.v; });
 
-  nodes.forEach(function (n) {
-    var t = new Date(n.CreatedAt);
-    var k = isNaN(t.getTime()) ? '' : fmtDate(t);
-    if (dayMap[k]) dayMap[k].newNode++;
-  });
-
-  var sparkN = 7;
-  var dailyReq = days.map(function (x) { return x.req; });
-  var dailyIpCnt = days.map(function (x) { return x.ips.size; });
-  var dailyNewNode = days.map(function (x) { return x.newNode; });
-  /* 节点/订阅累计曲线（近 7 天） */
-  var cum = function (items, w) {
+  /* 节点/订阅累计曲线（近 7 天，KPI 迷你曲线用） */
+  function cum(items) {
     var arr = [];
-    for (var j = sparkN - 1; j >= 0; j--) {
+    for (var j = 6; j >= 0; j--) {
       var end = new Date(); end.setDate(end.getDate() - j); end.setHours(23, 59, 59);
       arr.push(items.filter(function (it) { return new Date(it.CreatedAt) <= end; }).length);
     }
     return arr;
-  };
+  }
   var cumNodes = cum(nodes), cumSubs = cum(subs);
 
-  /* KPI 汇总 */
-  var todayCount = 0, ydCount = 0, todayIp = new Set(), ipSet = new Set();
-  allLogs.forEach(function (l) {
-    ipSet.add(l.ip);
-    var day = l.date.slice(0, 10);
-    if (day === todayStr) { todayCount += l.count; todayIp.add(l.ip); }
-    if (day === ydStr) ydCount += l.count;
-  });
   function pctDelta(now, before) {
     if (!before) return null;
     return Math.round((now - before) / before * 100);
   }
   var nodeBefore = nodes.filter(function (n) { return new Date(n.CreatedAt) <= weekAgo; }).length;
   var subBefore = subs.filter(function (s) { return new Date(s.CreatedAt) <= weekAgo; }).length;
-  function deltaHtml(kind, pct, text) {
+  function deltaHtml(pct, text) {
     if (pct === null) return '<span class="kpi-delta flat">' + text + '</span>';
     if (pct > 0) return '<span class="kpi-delta up">' + icon('trendup', 11) + '↑' + pct + '% ' + text + '</span>';
     if (pct < 0) return '<span class="kpi-delta down">' + icon('trenddown', 11) + '↓' + (-pct) + '% ' + text + '</span>';
     return '<span class="kpi-delta flat">— 持平 · ' + text + '</span>';
   }
-  var ydDelta = deltaHtml('', pctDelta(todayCount, ydCount), '较昨日');
-  var ipYdDelta = deltaHtml('', pctDelta(todayIp.size, (dayMap[ydStr] || { ips: new Set() }).ips.size), '今日 ' + todayIp.size + ' 个');
+  var ydDelta = deltaHtml(pctDelta(todayCount, ydCount), '较昨日');
 
   /* 协议分布 */
   var protoColors = ['var(--blue)', 'var(--purple)', 'var(--green)', 'var(--orange)', 'var(--cyan)', 'var(--red)'];
@@ -512,71 +455,51 @@ async function renderDashboard() {
     protoCount[scheme] = (protoCount[scheme] || 0) + 1;
   });
   var protos = Object.entries(protoCount).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 6);
-  var donutSegs = protos.map(function (p, idx) { return { label: p[0], value: p[1], color: protoColors[idx % protoColors.length] }; });
+  var donutSegs = protos.map(function (p, idx) {
+    return { label: p[0], value: p[1], color: protoColors[idx % protoColors.length] };
+  });
 
-  /* 动态时间线 */
-  var feed = [];
-  nodes.forEach(function (n) { feed.push({ type: 'node', name: n.Name || '(未命名)', at: n.CreatedAt }); });
-  subs.forEach(function (s) { feed.push({ type: 'sub', name: s.Name, at: s.CreatedAt }); });
-  feed = feed.filter(function (f) { return f.at; }).sort(function (a, b) { return (a.at < b.at) ? 1 : -1; }).slice(0, 7);
-  var feedDots = ['c1', 'c2', 'c3', 'c4'];
-  var feedHtml = feed.length ? feed.map(function (f, idx) {
-    return '<li><span class="feed-dot ' + feedDots[idx % 4] + '"></span><span class="feed-txt">' +
-      (f.type === 'node' ? '添加节点 <b>' + esc(f.name) + '</b>' : '创建订阅 <b>' + esc(f.name) + '</b>') +
-      '</span><span class="feed-time">' + relTime(f.at) + '</span></li>';
-  }).join('') : '<p class="empty">暂无动态 · 添加节点或订阅后会在这里显示</p>';
-
-  /* 最近访问 */
-  var recent = allLogs.slice().sort(function (a, b) { return (b.date > a.date) ? 1 : -1; }).slice(0, 6);
-  var logRows = recent.map(function (l) {
-    return '<tr><td class="dim">' + esc(l.date.slice(11, 19) || '—') + '</td><td>' + esc(l.ip) + '</td><td class="dim">' +
-      esc(l.addr || '未知') + '</td><td><span class="chip">' + esc(l.sub) + '</span></td><td class="num">' + l.count + '</td></tr>';
+  /* 国家分布：旗帜 emoji + 名称关键词聚合 */
+  var cCount = {}, unknown = 0;
+  nodes.forEach(function (n) {
+    var r = detectRegion(n.Name || '');
+    if (r) cCount[r] = (cCount[r] || 0) + 1; else unknown++;
+  });
+  var countries = Object.entries(cCount).sort(function (a, b) { return b[1] - a[1]; });
+  var cTotal = nodes.length || 1;
+  var countryMax = countries.length ? countries[0][1] : 1;
+  var countryRows = countries.map(function (c) {
+    var pct = Math.round(c[1] / cTotal * 100);
+    return '<li><span class="bar-name">' + esc(c[0]) + ' ' + esc(CN_NAMES[c[0]] || '') +
+      '</span><span class="bar-track"><span class="bar-fill" style="width:' +
+      Math.round(c[1] / countryMax * 100) + '%"></span></span>' +
+      '<span class="bar-num">' + c[1] + ' · ' + pct + '%</span></li>';
   }).join('');
-
-  /* 欢迎语 */
-  var now = new Date();
-  var weekMap = ['日', '一', '二', '三', '四', '五', '六'];
-  var dateCN = now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日 星期' + weekMap[now.getDay()];
-  var greetName = (state.me && state.me.nickname) || '管理员';
-  var greet = now.getHours() < 12 ? '上午好' : (now.getHours() < 18 ? '下午好' : '晚上好');
-
-  var trendSeries = [
-    { name: '订阅请求', color: 'var(--blue)', values: dailyReq },
-    { name: '独立 IP', color: 'var(--purple)', values: dailyIpCnt },
-    { name: '新增节点', color: 'var(--green)', values: dailyNewNode }
-  ];
+  if (unknown) {
+    countryRows += '<li><span class="bar-name">❓ 未知</span>' +
+      '<span class="bar-track"><span class="bar-fill" style="width:' +
+      Math.round(unknown / countryMax * 100) + '%"></span></span>' +
+      '<span class="bar-num">' + unknown + ' · ' + Math.round(unknown / cTotal * 100) + '%</span></li>';
+  }
+  if (!countryRows) countryRows = '<p class="empty">暂无节点</p>';
 
   view.innerHTML =
-    '<section class="tile banner"><span class="banner-accent"></span>' +
-    '<div class="banner-txt"><h2>' + greet + '，' + esc(greetName) + ' 👋</h2>' +
-    '<p>今天是 ' + dateCN + '，共管理 ' + nodes.length + ' 个节点、' + subs.length + ' 个订阅，祝你工作顺利！</p></div></section>' +
+    kpiCard({ label: '节点总数', value: num(nodes.length), color: 'blue', colorVar: 'var(--blue)', icon: 'server', spark: cumNodes, delta: deltaHtml(pctDelta(nodes.length, nodeBefore), '本周') }) +
+    kpiCard({ label: '订阅数', value: num(subs.length), color: 'green', colorVar: 'var(--green)', icon: 'link', spark: cumSubs, delta: deltaHtml(pctDelta(subs.length, subBefore), '本周') }) +
+    kpiCard({ label: '今日订阅请求', value: num(todayCount), color: 'purple', colorVar: 'var(--purple)', icon: 'activity', spark: dailyReqVals, delta: ydDelta }) +
 
-    kpiCard({ label: '节点总数', value: num(nodes.length), color: 'blue', colorVar: 'var(--blue)', icon: 'server', spark: cumNodes, delta: deltaHtml('', pctDelta(nodes.length, nodeBefore), '本周') }) +
-    kpiCard({ label: '订阅数', value: num(subs.length), color: 'green', colorVar: 'var(--green)', icon: 'link', spark: cumSubs, delta: deltaHtml('', pctDelta(subs.length, subBefore), '本周') }) +
-    kpiCard({ label: '今日订阅请求', value: num(todayCount), color: 'purple', colorVar: 'var(--purple)', icon: 'activity', spark: dailyReq.slice(-sparkN), delta: ydDelta }) +
-    kpiCard({ label: '独立访问 IP', value: num(ipSet.size), color: 'orange', colorVar: 'var(--orange)', icon: 'globe', spark: dailyIpCnt.slice(-sparkN), delta: ipYdDelta }) +
-
-    '<section class="tile t-trend"><header class="tile-head">' +
-    '<span class="head-ic blue">' + icon('activity', 14) + '</span><h3>订阅访问趋势</h3>' +
-    '<div class="seg" role="group" aria-label="时间范围">' +
-    '<button type="button" data-range="7" class="' + (range === 7 ? 'is-on' : '') + '">近 7 天</button>' +
-    '<button type="button" data-range="30" class="' + (range === 30 ? 'is-on' : '') + '">近 30 天</button>' +
-    '</div></header>' +
-    '<div class="legend">' + trendSeries.map(function (s) {
-      return '<span><i style="background:' + s.color + '"></i>' + s.name + '</span>';
-    }).join('') + '</div>' +
-    '<div class="chart-wrap" id="trend-wrap">' + multiChart(days.map(function (x) { return x.label; }), trendSeries) +
-    '<div class="chart-tip" id="trend-tip" hidden></div></div></section>' +
+    '<section class="tile t-country"><header class="tile-head">' +
+    '<span class="head-ic green">' + icon('globe', 14) + '</span><h3>节点国家分布</h3>' +
+    '<span class="chip neutral" style="margin-left:auto">' + (countries.length + (unknown ? 1 : 0)) + ' 个地区</span>' +
+    '</header>' +
+    '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">按节点名称与旗帜智能聚合地区分布；未识别的节点单独统计。</p>' +
+    '<ul class="bars">' + countryRows + '</ul></section>' +
 
     '<section class="tile t-proto"><header class="tile-head">' +
-    '<span class="head-ic purple">' + icon('pie', 14) + '</span><h3>协议分布</h3></header>' +
+    '<span class="head-ic purple">' + icon('pie', 14) + '</span><h3>协议分布</h3>' +
+    '<span class="chip neutral" style="margin-left:auto">' + protos.length + ' 种协议</span>' +
+    '</header>' +
     (donutSegs.length ? donut(donutSegs, '节点总量') : '<p class="empty">暂无节点</p>') +
-    '</section>' +
-
-    '<section class="tile t-logs"><header class="tile-head">' +
-    '<span class="head-ic green">' + icon('clock', 14) + '</span><h3>最近订阅访问</h3></header>' +
-    (logRows ? '<table class="table"><thead><tr><th>时间</th><th>IP</th><th>归属地</th><th>订阅</th><th class="num">次数</th></tr></thead><tbody>' + logRows + '</tbody></table>'
-      : '<p class="empty">暂无访问记录 · 订阅被客户端拉取后这里会显示 IP 与归属地</p>') +
     '</section>' +
 
     '<section class="tile t-actions"><header class="tile-head">' +
@@ -586,42 +509,12 @@ async function renderDashboard() {
     '<button class="qa-item" id="qa-sub" type="button"><span class="qa-ic green">' + icon('link', 17) + '</span>新建订阅</button>' +
     '<button class="qa-item" id="qa-tpl" type="button"><span class="qa-ic purple">' + icon('filecode', 17) + '</span>新建模板</button>' +
     '<button class="qa-item" id="qa-refresh" type="button"><span class="qa-ic orange">' + icon('refresh', 17) + '</span>刷新数据</button>' +
-    '</div></section>' +
+    '</div></section>';
 
-    '<section class="tile t-feed"><header class="tile-head">' +
-    '<span class="head-ic blue">' + icon('zap', 14) + '</span><h3>最新动态</h3></header>' +
-    '<ul class="feed">' + feedHtml + '</ul></section>' +
-
-    '<section class="tile t-sys"><header class="tile-head">' +
-    '<span class="head-ic green">' + icon('settings', 14) + '</span><h3>系统信息</h3></header>' +
-    '<div class="sys-row"><span>程序版本</span><b>v' + esc(state.version || '2.1') + '</b></div>' +
-    '<div class="sys-row"><span>服务地址</span><b>' + esc(location.host) + '</b></div>' +
-    '<div class="sys-row"><span>数据目录</span><b class="mono">./db</b></div>' +
-    '<div class="sys-row"><span>模板目录</span><b class="mono">./template</b></div>' +
-    '</section>';
-
-  view.querySelectorAll('.seg button[data-range]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      state.range = parseInt(btn.dataset.range, 10);
-      renderDashboard();
-    });
-  });
-  $('#dash-goto-nodes') && null;
   $('#qa-node').addEventListener('click', function () { state.pendingDialog = 'add-node'; location.hash = '#/nodes'; });
   $('#qa-sub').addEventListener('click', function () { state.pendingDialog = 'add-sub'; location.hash = '#/subs'; });
   $('#qa-tpl').addEventListener('click', function () { state.pendingDialog = 'add-tpl'; location.hash = '#/templates'; });
   $('#qa-refresh').addEventListener('click', renderDashboard);
-  mountTrend(days.map(function (x) { return x.label; }), trendSeries);
-
-}
-
-/* ================= 节点管理 ================= */
-function nodeRowHtml(n) {
-  var chips = (n.GroupNodes || []).map(function (g) { return '<span class="chip">' + esc(g.Name) + '</span>'; }).join('') || '<span class="dim">—</span>';
-  return '<tr data-id="' + n.ID + '"><td><b>' + esc(n.Name || '(未命名)') + '</b></td><td>' + chips +
-    '</td><td><span class="mono truncate" title="' + esc(n.Link) + '">' + esc(n.Link) + '</span></td>' +
-    '<td class="ops"><button class="iconbtn sm" data-act="edit" aria-label="编辑">' + icon('edit', 14) +
-    '</button><button class="iconbtn sm danger" data-act="del" aria-label="删除">' + icon('trash', 14) + '</button></td></tr>';
 }
 
 async function renderNodes() {

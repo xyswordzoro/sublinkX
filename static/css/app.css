@@ -40,6 +40,7 @@ body{
   font-family: -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
   font-size:13px; line-height:1.55;
   background:
+    radial-gradient(circle at 1px 1px, light-dark(rgba(23,43,77,.05), rgba(255,255,255,.05)) 1px, transparent 0) 0 0 / 24px 24px,
     radial-gradient(900px 480px at 88% -8%, var(--bg-tint-blue), transparent),
     radial-gradient(760px 420px at -6% 18%, var(--bg-tint-purple), transparent),
     var(--bg);
@@ -154,11 +155,6 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
 .nav-count{ margin-left:auto; font-size:11px; background:var(--surface-2); border-radius:999px; padding:1px 7px; color:var(--muted); font-variant-numeric:tabular-nums }
 .nav-item.is-active .nav-count{ background:rgba(255,255,255,.22); color:#fff }
 
-.side-foot{ margin-top:auto; display:flex; align-items:center; gap:8px; padding-top:12px; border-top:1px solid var(--border) }
-.user{ display:flex; align-items:center; gap:9px; flex:1; min-width:0 }
-.user-meta{ min-width:0 }
-.user-meta b{ display:block; font-size:13px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-.user-meta i{ font-style:normal; font-size:11px; color:var(--muted) }
 .avatar{
   width:32px; height:32px; border-radius:999px; flex:none;
   background:var(--grad-btn); color:#fff;
@@ -180,13 +176,10 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
 /* ---------- 顶栏 ---------- */
 .main{ padding:16px 22px 24px; display:flex; flex-direction:column; gap:16px; min-width:0 }
 .top{
-  position:sticky; top:0; z-index:20;
   display:flex; align-items:center; gap:14px;
-  padding:10px 0 12px;
-  background:light-dark(rgba(238,242,248,.82), rgba(11,13,18,.82));
-  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  padding:4px 0 16px;
 }
-.page-title{ font-size:17px; font-weight:500 }
+.page-title{ font-size:22px; font-weight:500 }
 .top-search{
   display:flex; align-items:center; gap:8px; padding:8px 14px;
   border-radius:12px; border:1px solid var(--border); background:var(--surface);
@@ -208,13 +201,14 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
 .bento{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:14px }
 .tile{
   grid-column:1/-1; background:var(--surface); border:1px solid var(--border);
-  border-radius:16px; padding:18px 20px; box-shadow:var(--shadow-sm); min-width:0;
+  border-radius:16px; padding:18px 20px; box-shadow:var(--shadow-md); min-width:0;
   transition:transform .18s, box-shadow .18s;
 }
-.tile:hover{ box-shadow:var(--shadow-md) }
-.kpi{ grid-column:span 3 }
-.t-trend,.t-logs,.t-feed{ grid-column:span 8 }
-.t-proto,.t-actions,.t-sys{ grid-column:span 4 }
+.tile:hover{ transform:translateY(-2px); box-shadow:var(--shadow-lg) }
+.kpi{ grid-column:span 4 }
+.t-country{ grid-column:span 5 }
+.t-proto{ grid-column:span 4 }
+.t-actions{ grid-column:span 3 }
 
 .tile-head{ display:flex; align-items:center; gap:10px; margin-bottom:12px }
 .tile-head h3{ font-size:13.5px; font-weight:500 }
@@ -288,8 +282,17 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
 .legend span{ display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--muted) }
 .legend i{ width:8px; height:8px; border-radius:999px; display:inline-block }
 
+
+/* ---------- 分布条形列表（国家/协议） ---------- */
+.bars{ list-style:none; display:flex; flex-direction:column; gap:12px }
+.bars li{ display:flex; align-items:center; gap:10px }
+.bar-name{ width:118px; font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.bar-track{ flex:1; height:9px; border-radius:999px; background:var(--surface-2); overflow:hidden }
+.bar-fill{ display:block; height:100%; border-radius:999px; background:var(--primary) }
+.bar-num{ flex:none; text-align:right; font-size:12px; font-variant-numeric:tabular-nums; color:var(--fg) }
+
 /* 环形图 */
-.donut-wrap{ display:flex; align-items:center; gap:18px }
+.donut-wrap{ display:flex; flex-wrap:wrap; align-items:center; gap:18px }
 .donut-center-val{ font-size:21px; font-weight:500; fill:var(--fg) }
 .donut-center-label{ font-size:10.5px; fill:var(--muted) }
 .donut-legend{ flex:1; display:flex; flex-direction:column; gap:7px; min-width:0 }
@@ -405,7 +408,8 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
 @media (max-width:1120px){
   .promo{ grid-column:1/-1 }
   .kpi{ grid-column:span 6 }
-  .t-trend,.t-proto,.t-logs,.t-actions,.t-feed,.t-sys{ grid-column:1/-1 }
+  .t-country{ grid-column:1/-1 }
+  .t-proto,.t-actions{ grid-column:span 6 }
 }
 @media (max-width:860px){
   .app{ grid-template-columns:1fr }
@@ -413,8 +417,6 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
   .nav{ flex-direction:row; overflow-x:auto; flex:1 }
   .nav-item{ white-space:nowrap; padding:7px 10px }
   .nav-count{ display:none }
-  .side-foot{ margin:0; border-top:none; padding:0 }
-  .user-meta{ display:none }
   .top-search{ display:none }
   .top-uname{ display:none }
   .qa-grid{ grid-template-columns:1fr 1fr }
