@@ -6,6 +6,7 @@ var ICONS = {
   dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
   server: '<rect x="2" y="4" width="20" height="7" rx="2"/><rect x="2" y="13" width="20" height="7" rx="2"/><line x1="6" y1="7.5" x2="6.01" y2="7.5"/><line x1="6" y1="16.5" x2="6.01" y2="16.5"/>',
   link: '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/>',
+  rss: '<path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/>',
   filecode: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="10 13 8 15 10 17"/><polyline points="14 13 16 15 14 17"/>',
   scrolltext: '<path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/>',
   settings: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
@@ -231,7 +232,7 @@ async function enterApp() {
   } catch (e) { state.version = ''; }
   var nick = state.me.nickname || '管理员';
   applyAvatar('top-avatar', state.me);
-  $('#top-uname').textContent = nick;
+  document.getElementById('top-uname-name').textContent = nick;
   $('#login-view').hidden = true;
   $('#app-view').hidden = false;
   if (!location.hash) location.hash = '#/dashboard';
@@ -262,6 +263,7 @@ function route() {
 function setNavCounts() { }
 
 
+
 function errorBox(msg) {
   return '<section class="tile"><p class="empty">加载失败：' + esc(msg) + '</p></section>';
 }
@@ -288,36 +290,41 @@ function sparkline(values, colorVar) {
 }
 
 function donut(segments, centerLabel) {
-  var R = 54, C = 2 * Math.PI * R;
+  var R = 58, C = 2 * Math.PI * R;
   var total = segments.reduce(function (s, x) { return s + x.value; }, 0);
   var offset = 0, segs = '';
   segments.forEach(function (s) {
     var len = total ? s.value / total * C : 0;
-    segs += '<circle cx="75" cy="75" r="' + R + '" fill="none" stroke="' + s.color + '" stroke-width="15" ' +
-      'stroke-dasharray="' + Math.max(0, len - 3) + ' ' + (C - Math.max(0, len - 3)) + '" ' +
-      'stroke-dashoffset="' + (-offset) + '" transform="rotate(-90 75 75)"/>';
+    var gap = segments.length > 1 ? 5 : 0;
+    segs += '<circle cx="75" cy="75" r="' + R + '" fill="none" stroke="' + s.color + '" stroke-width="14" ' +
+      'stroke-linecap="round" stroke-dasharray="' + Math.max(0, len - gap) + ' ' + (C - Math.max(0, len - gap)) + '" ' +
+      'stroke-dashoffset="' + (-offset - gap / 2) + '" transform="rotate(-90 75 75)"/>';
     offset += len;
   });
   var pcts = pctList(segments.map(function (x) { return x.value; }), total);
-  var legend = segments.map(function (s, si) {
-    return '<li><i style="background:' + s.color + '"></i><span class="dl-name">' + esc(s.label) + '</span>' +
-      '<span class="dl-num">' + s.value + ' · ' + pcts[si] + '%</span></li>';
+  var cells = segments.map(function (s, si) {
+    return '<div class="proto-cell"><div class="proto-cell-top"><span class="proto-dot" style="background:' +
+      s.color + '"></span><b>' + esc(s.label) + '</b></div><div class="pct">' + s.value + ' · ' + pcts[si] + '%</div></div>';
   }).join('');
   return '<div class="donut-wrap">' +
-    '<svg width="150" height="150" viewBox="0 0 150 150" role="img" aria-label="协议分布环形图">' + segs +
+    '<svg width="170" height="170" viewBox="0 0 150 150" style="width:170px;height:170px" role="img" aria-label="协议分布环形图">' + segs +
     '<text x="75" y="72" text-anchor="middle" class="donut-center-val">' + num(total) + '</text>' +
     '<text x="75" y="90" text-anchor="middle" class="donut-center-label">' + esc(centerLabel) + '</text>' +
-    '</svg><ul class="donut-legend">' + legend + '</ul></div>';
+    '</svg></div>' +
+    '<div class="proto-grid">' + cells + '</div>';
 }
 
 /* ================= 仪表盘 ================= */
 function kpiCard(cfg) {
   return '<section class="tile kpi kpi-card">' +
-    '<div class="kpi-head-row"><div class="kpi-top">' +
-    '<span class="kpi-ic ' + cfg.color + '">' + icon(cfg.icon, 19) + '</span>' +
-    '<div><p class="kpi-label">' + cfg.label + '</p><p class="kpi-value">' + cfg.value + '</p></div>' +
-    '</div>' + (cfg.delta || '') + '</div>' +
+    '<span class="strip c-' + cfg.color + '"></span>' +
+    '<div class="kpi-top">' +
+    '<div><p class="kpi-label">' + cfg.label + '</p>' +
+    '<div class="kpi-value-row"><span class="kpi-value">' + cfg.value + '</span>' + (cfg.delta || '') + '</div></div>' +
+    '<span class="kpi-ic ' + cfg.color + '">' + icon(cfg.icon, 26) + '</span>' +
+    '</div>' +
     sparkline(cfg.spark, cfg.colorVar) +
+    '<div class="kpi-foot"><span>' + cfg.footer + '</span></div>' +
     '</section>';
 }
 
@@ -402,7 +409,6 @@ async function renderDashboard() {
     nodes = rs[0].data || [];
     subs = rs[1].data || [];
     state.nodes = nodes; state.subs = subs;
-    setNavCounts();
   } catch (e) { view.innerHTML = errorBox(e.message); return; }
 
   var todayStr = fmtDate(new Date());
@@ -420,13 +426,16 @@ async function renderDashboard() {
   }
   var dayMap = {};
   dailyReq.forEach(function (x) { dayMap[x.key] = x; });
+  var totalVisits = 0;
+  var ipSet = new Set();
   subs.forEach(function (sub) {
     (sub.SubLogs || []).forEach(function (l) {
       var day = (l.Date || '').slice(0, 10);
       var hit = dayMap[day];
       if (hit) hit.v += (l.Count || 0);
-      if (day === todayStr) todayCount += (l.Count || 0);
+      if (day === todayStr) { todayCount += (l.Count || 0); ipSet.add(l.IP); }
       if (day === ydStr) ydCount += (l.Count || 0);
+      totalVisits += (l.Count || 0);
     });
   });
   var dailyReqVals = dailyReq.map(function (x) { return x.v; });
@@ -469,6 +478,15 @@ async function renderDashboard() {
     return { label: p[0], value: p[1], color: protoColors[idx % protoColors.length] };
   });
 
+  /* 分组数量（KPI 底部说明用） */
+  var gCount = {}, noGroup = 0;
+  nodes.forEach(function (n) {
+    var gs = n.GroupNodes || [];
+    if (!gs.length) { noGroup++; return; }
+    gs.forEach(function (g) { gCount[g.Name] = (gCount[g.Name] || 0) + 1; });
+  });
+  var groups = Object.entries(gCount);
+
   /* 国家分布：旗帜 emoji + 名称关键词聚合 */
   var cCount = {}, unknown = 0;
   nodes.forEach(function (n) {
@@ -481,41 +499,58 @@ async function renderDashboard() {
   if (unknown) regionRows.push(['未知', unknown, '']);
   var regionPcts = pctList(regionRows.map(function (r) { return r[1]; }), nodes.length || 1);
   var countryRows = regionRows.map(function (r, idx) {
-    var label = r[0] === '未知' ? '❓ 未知' : r[0] + ' ' + r[2];
-    return '<li><span class="bar-name">' + esc(label) +
-      '</span><span class="bar-track"><span class="bar-fill" style="width:' +
-      Math.round(r[1] / countryMax * 100) + '%"></span></span>' +
-      '<span class="bar-num">' + r[1] + ' · ' + regionPcts[idx] + '%</span></li>';
+    var label = r[0] === '未知' ? '🌐 未知' : flagEmoji(r[0]) + ' ' + r[0];
+    return '<div class="c-row">' +
+      '<div class="c-head"><div class="c-left"><span class="c-flag">' + label + '</span>' +
+      '<span class="c-name">' + esc(r[2] || (r[0] === '未知' ? '未知地区' : '')) + '</span></div>' +
+      '<div class="c-right"><span class="c-count">' + r[1] + ' 个节点</span>' +
+      '<span class="c-pct">' + regionPcts[idx] + '%</span></div></div>' +
+      '<div class="c-bar"><span class="c-fill cg-' + (idx % 8) + '" style="width:' +
+      Math.round(r[1] / countryMax * 100) + '%"></span></div></div>';
   }).join('');
   if (!countryRows) countryRows = '<p class="empty">暂无节点</p>';
 
   view.innerHTML =
-    kpiCard({ label: '节点总数', value: num(nodes.length), color: 'blue', colorVar: 'var(--blue)', icon: 'server', spark: cumNodes, delta: deltaHtml(pctDelta(nodes.length, nodeBefore), '本周') }) +
-    kpiCard({ label: '订阅数', value: num(subs.length), color: 'green', colorVar: 'var(--green)', icon: 'link', spark: cumSubs, delta: deltaHtml(pctDelta(subs.length, subBefore), '本周') }) +
-    kpiCard({ label: '今日订阅请求', value: num(todayCount), color: 'purple', colorVar: 'var(--purple)', icon: 'activity', spark: dailyReqVals, delta: ydDelta }) +
+    kpiCard({ label: '节点总数', value: num(nodes.length), color: 'blue', colorVar: 'var(--blue)', icon: 'server', spark: cumNodes, delta: deltaHtml(pctDelta(nodes.length, nodeBefore), '本周'), footer: '共 ' + groups.length + ' 个分组' }) +
+    kpiCard({ label: '订阅数', value: num(subs.length), color: 'green', colorVar: 'var(--green)', icon: 'rss', spark: cumSubs, delta: deltaHtml(pctDelta(subs.length, subBefore), '本周'), footer: '累计访问 ' + num(totalVisits) + ' 次' }) +
+    kpiCard({ label: '今日订阅请求', value: num(todayCount), color: 'purple', colorVar: 'var(--purple)', icon: 'activity', spark: dailyReqVals, delta: ydDelta, footer: '独立 IP ' + ipSet.size + ' 个' }) +
 
-    '<section class="tile t-country"><header class="tile-head">' +
-    '<span class="head-ic green">' + icon('globe', 14) + '</span><h3>节点国家分布</h3>' +
-    '<span class="chip neutral" style="margin-left:auto">' + (countries.length + (unknown ? 1 : 0)) + ' 个地区</span>' +
+    '<section class="tile t-country">' +
+    '<header class="tile-head" style="border-bottom:1px solid var(--border);padding-bottom:12px">' +
+    '<span class="head-ic green">' + icon('globe', 15) + '</span>' +
+    '<div><h3>节点国家分布</h3><p class="tile-desc">按节点名称与旗帜智能聚合分布</p></div>' +
+    '<span class="head-badge">' + regionRows.length + ' 个地区</span>' +
     '</header>' +
-    '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">按节点名称与旗帜智能聚合地区分布；未识别的节点单独统计。</p>' +
-    '<ul class="bars">' + countryRows + '</ul></section>' +
-
-    '<section class="tile t-proto"><header class="tile-head">' +
-    '<span class="head-ic purple">' + icon('pie', 14) + '</span><h3>协议分布</h3>' +
-    '<span class="chip neutral" style="margin-left:auto">' + protos.length + ' 种协议</span>' +
-    '</header>' +
-    (donutSegs.length ? donut(donutSegs, '节点总量') : '<p class="empty">暂无节点</p>') +
+    '<div style="margin-top:14px">' + countryRows + '</div>' +
+    '<div class="tile-foot"><span>智能聚类识别已开启</span>' +
+    '<button class="linkbtn" id="qa-refresh" type="button">刷新分类</button></div>' +
     '</section>' +
 
-    '<section class="tile t-actions"><header class="tile-head">' +
-    '<span class="head-ic orange">' + icon('zap', 14) + '</span><h3>快捷操作</h3></header>' +
-    '<div class="qa-grid">' +
-    '<button class="qa-item" id="qa-node" type="button"><span class="qa-ic blue">' + icon('plus', 17) + '</span>添加节点</button>' +
-    '<button class="qa-item" id="qa-sub" type="button"><span class="qa-ic green">' + icon('link', 17) + '</span>新建订阅</button>' +
-    '<button class="qa-item" id="qa-tpl" type="button"><span class="qa-ic purple">' + icon('filecode', 17) + '</span>新建模板</button>' +
-    '<button class="qa-item" id="qa-refresh" type="button"><span class="qa-ic orange">' + icon('refresh', 17) + '</span>刷新数据</button>' +
-    '</div></section>';
+    '<section class="tile t-proto">' +
+    '<header class="tile-head" style="border-bottom:1px solid var(--border);padding-bottom:12px">' +
+    '<span class="head-ic purple">' + icon('pie', 15) + '</span>' +
+    '<div><h3>协议分布</h3><p class="tile-desc">各加密传输协议比例</p></div>' +
+    '<span class="head-badge">' + protos.length + ' 种协议</span>' +
+    '</header>' +
+    '<div style="margin-top:14px">' +
+    (donutSegs.length ? donut(donutSegs, '节点总量') : '<p class="empty">暂无节点</p>') +
+    '</div>' +
+    '<div class="tile-foot" style="justify-content:center"><span>自动匹配最优转换规则协议</span></div>' +
+    '</section>' +
+
+    '<section class="tile t-actions">' +
+    '<header class="tile-head" style="border-bottom:1px solid var(--border);padding-bottom:12px">' +
+    '<span class="head-ic orange">' + icon('zap', 15) + '</span>' +
+    '<div><h3>快捷操作</h3><p class="tile-desc">常用管理指令</p></div>' +
+    '</header>' +
+    '<div class="qa-grid" style="margin-top:14px">' +
+    '<button class="qa-item" id="qa-node" type="button"><span class="qa-ic blue">' + icon('plus', 18) + '</span>添加节点</button>' +
+    '<button class="qa-item" id="qa-sub" type="button"><span class="qa-ic green">' + icon('link', 18) + '</span>新建订阅</button>' +
+    '<button class="qa-item" id="qa-tpl" type="button"><span class="qa-ic purple">' + icon('filecode', 18) + '</span>新建模板</button>' +
+    '<button class="qa-item" id="qa-refresh" type="button"><span class="qa-ic orange">' + icon('refresh', 18) + '</span>刷新数据</button>' +
+    '</div>' +
+    '<div class="qa-tip">' + icon('zap', 15) + '<span>粘贴 ss:// 等分享链接即可快速添加节点</span></div>' +
+    '</section>';
 
   $('#qa-node').addEventListener('click', function () { state.pendingDialog = 'add-node'; location.hash = '#/nodes'; });
   $('#qa-sub').addEventListener('click', function () { state.pendingDialog = 'add-sub'; location.hash = '#/subs'; });
@@ -537,7 +572,6 @@ async function renderNodes() {
   try {
     var d = await api('/api/v1/nodes/get');
     state.nodes = d.data || [];
-    setNavCounts();
   } catch (e) { view.innerHTML = errorBox(e.message); return; }
 
   view.innerHTML =
@@ -629,7 +663,6 @@ async function renderSubs() {
   try {
     var d = await api('/api/v1/subcription/get');
     state.subs = d.data || [];
-    setNavCounts();
   } catch (e) { view.innerHTML = errorBox(e.message); return; }
 
   var rows = state.subs.map(function (s) {
@@ -698,7 +731,6 @@ async function openSubDlg(sub) {
   try {
     var nd = await api('/api/v1/nodes/get');
     state.nodes = nd.data || [];
-    setNavCounts();
   } catch (e) {
     toast('获取节点列表失败：' + e.message, false);
     return;
@@ -966,7 +998,16 @@ function bindStaticEvents() {
     toast('已退出登录', true);
   });
 
+  $('#btn-refresh').addEventListener('click', function () { route(); toast('数据已刷新', true); });
   $('#btn-theme').addEventListener('click', cycleTheme);
+
+  /* 侧栏状态卡时钟 */
+  function tickClock() {
+    var el = document.getElementById('side-clock');
+    if (el) el.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
   /* 全局搜索：Enter 跳转到节点管理并带入关键词 */
   $('#gs-input').addEventListener('keydown', function (e) {
     if (e.key !== 'Enter') return;
