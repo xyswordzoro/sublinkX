@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  sublinkx:
+    image: ghcr.io/xyswordzoro/sublinkx:latest   # 也可用 build: . 本地构建
+    container_name: sublinkx
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./db:/app/db              # 数据库与配置（需备份）
+      - ./template:/app/template  # Clash/Surge 模板（需备份）
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped

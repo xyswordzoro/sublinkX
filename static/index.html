@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="light dark"/>
+<title>SublinkX</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2"/>
+<link rel="icon" href="/static/favicon.ico?v=2"/>
+<link rel="stylesheet" href="/static/css/app.css?v=20261107l"/>
+</head>
+<body>
+
+<!-- 登录页 -->
+<div id="login-view" class="login-view" hidden>
+  <div class="login-blob blob-a"></div>
+  <div class="login-blob blob-b"></div>
+  <div class="login-card">
+    <div class="login-head">
+      <span class="logo-mark"><i data-icon="zap"></i></span>
+      <div class="login-title">
+        <h1>SublinkX</h1>
+        <p>节点订阅管理系统</p>
+      </div>
+    </div>
+    <form id="login-form">
+      <label class="field"><span>账号</span><input id="lg-user" class="input" autocomplete="username" required/></label>
+      <label class="field" style="margin-top:14px"><span>密码</span><input id="lg-pass" class="input" type="password" autocomplete="current-password" required/></label>
+      <p id="lg-error" class="form-error" role="alert" hidden></p>
+      <button class="btn btn-primary btn-block" type="submit" style="margin-top:14px">登 录</button>
+    </form>
+    <p class="login-foot">默认账号 admin / 123456 · 主题跟随系统自动切换</p>
+  </div>
+</div>
+
+<!-- 应用外壳 -->
+<div id="app-view" class="app" hidden>
+  <aside class="side">
+    <div class="logo">
+      <span class="logo-mark"><i data-icon="zap"></i></span>
+      <span class="logo-name">SublinkX</span>
+      <span class="ver" id="side-ver">v2.1</span>
+    </div>
+    <nav class="nav" aria-label="主导航">
+      <a class="nav-item" data-route="dashboard" href="#/dashboard"><i data-icon="dashboard"></i>仪表盘</a>
+      <a class="nav-item" data-route="nodes" href="#/nodes"><i data-icon="server"></i>节点管理<span class="nav-count" id="nav-nodes"></span></a>
+      <a class="nav-item" data-route="subs" href="#/subs"><i data-icon="link"></i>订阅管理<span class="nav-count" id="nav-subs"></span></a>
+      <a class="nav-item" data-route="templates" href="#/templates"><i data-icon="filecode"></i>模板配置</a>
+      <a class="nav-item" data-route="logs" href="#/logs"><i data-icon="scrolltext"></i>操作日志</a>
+      <a class="nav-item" data-route="settings" href="#/settings"><i data-icon="settings"></i>系统设置</a>
+    </nav>
+    <div class="side-foot">
+      <div class="user">
+        <span class="avatar" id="side-avatar">A</span>
+        <span class="user-meta"><b id="side-username">admin</b><i id="side-nickname">管理员</i></span>
+      </div>
+      <button class="iconbtn" id="btn-logout" type="button" aria-label="退出登录"><i data-icon="logout"></i></button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <h2 class="page-title" id="page-title">仪表盘</h2>
+      <div class="top-search">
+        <i data-icon="search"></i>
+        <input id="gs-input" placeholder="搜索节点、订阅…"/>
+        <kbd>Enter</kbd>
+      </div>
+      <div class="top-actions">
+        <button class="iconbtn" id="btn-theme" type="button" aria-label="切换主题模式"><i data-icon="moon"></i></button>
+        <div class="top-user">
+          <span class="avatar" id="top-avatar">A</span>
+          <span class="top-uname" id="top-uname">管理员</span>
+        </div>
+      </div>
+    </header>
+    <main id="view" class="bento" aria-live="polite"></main>
+  </div>
+</div>
+
+<dialog id="dlg" class="dlg"></dialog>
+<div id="toast" class="toast" hidden></div>
+<script src="/static/js/app.js?v=20261107m"></script>
+</body>
+</html>
