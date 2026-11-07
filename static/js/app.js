@@ -259,10 +259,8 @@ function route() {
   ROUTES[name].render();
 }
 
-function setNavCounts() {
-  $('#nav-nodes').textContent = state.nodes.length || '';
-  $('#nav-subs').textContent = state.subs.length || '';
-}
+function setNavCounts() { }
+
 
 function errorBox(msg) {
   return '<section class="tile"><p class="empty">加载失败：' + esc(msg) + '</p></section>';
@@ -300,10 +298,10 @@ function donut(segments, centerLabel) {
       'stroke-dashoffset="' + (-offset) + '" transform="rotate(-90 75 75)"/>';
     offset += len;
   });
-  var legend = segments.map(function (s) {
-    var pct = total ? Math.round(s.value / total * 100) : 0;
+  var pcts = pctList(segments.map(function (x) { return x.value; }), total);
+  var legend = segments.map(function (s, si) {
     return '<li><i style="background:' + s.color + '"></i><span class="dl-name">' + esc(s.label) + '</span>' +
-      '<span class="dl-num">' + s.value + ' · ' + pct + '%</span></li>';
+      '<span class="dl-num">' + s.value + ' · ' + pcts[si] + '%</span></li>';
   }).join('');
   return '<div class="donut-wrap">' +
     '<svg width="150" height="150" viewBox="0 0 150 150" role="img" aria-label="协议分布环形图">' + segs +
@@ -321,6 +319,18 @@ function kpiCard(cfg) {
     '</div>' + (cfg.delta || '') + '</div>' +
     sparkline(cfg.spark, cfg.colorVar) +
     '</section>';
+}
+
+/* 最大余数法百分比分配，保证合计为 100% */
+function pctList(values, total) {
+  if (!total) return values.map(function () { return 0; });
+  var raw = values.map(function (v) { return v / total * 100; });
+  var floors = raw.map(function (r) { return Math.floor(r); });
+  var rem = 100 - floors.reduce(function (a, b) { return a + b; }, 0);
+  var order = raw.map(function (r, i) { return [r - Math.floor(r), i]; })
+    .sort(function (a, b) { return b[0] - a[0]; });
+  for (var k = 0; k < rem && order.length; k++) floors[order[k % order.length][1]]++;
+  return floors;
 }
 
 /* 节点地区识别：优先旗帜 emoji，其次名称关键词 */
@@ -466,21 +476,17 @@ async function renderDashboard() {
     if (r) cCount[r] = (cCount[r] || 0) + 1; else unknown++;
   });
   var countries = Object.entries(cCount).sort(function (a, b) { return b[1] - a[1]; });
-  var cTotal = nodes.length || 1;
   var countryMax = countries.length ? countries[0][1] : 1;
-  var countryRows = countries.map(function (c) {
-    var pct = Math.round(c[1] / cTotal * 100);
-    return '<li><span class="bar-name">' + esc(c[0]) + ' ' + esc(CN_NAMES[c[0]] || '') +
+  var regionRows = countries.map(function (c) { return [c[0], c[1], CN_NAMES[c[0]] || '']; });
+  if (unknown) regionRows.push(['未知', unknown, '']);
+  var regionPcts = pctList(regionRows.map(function (r) { return r[1]; }), nodes.length || 1);
+  var countryRows = regionRows.map(function (r, idx) {
+    var label = r[0] === '未知' ? '❓ 未知' : r[0] + ' ' + r[2];
+    return '<li><span class="bar-name">' + esc(label) +
       '</span><span class="bar-track"><span class="bar-fill" style="width:' +
-      Math.round(c[1] / countryMax * 100) + '%"></span></span>' +
-      '<span class="bar-num">' + c[1] + ' · ' + pct + '%</span></li>';
+      Math.round(r[1] / countryMax * 100) + '%"></span></span>' +
+      '<span class="bar-num">' + r[1] + ' · ' + regionPcts[idx] + '%</span></li>';
   }).join('');
-  if (unknown) {
-    countryRows += '<li><span class="bar-name">❓ 未知</span>' +
-      '<span class="bar-track"><span class="bar-fill" style="width:' +
-      Math.round(unknown / countryMax * 100) + '%"></span></span>' +
-      '<span class="bar-num">' + unknown + ' · ' + Math.round(unknown / cTotal * 100) + '%</span></li>';
-  }
   if (!countryRows) countryRows = '<p class="empty">暂无节点</p>';
 
   view.innerHTML =
@@ -515,6 +521,14 @@ async function renderDashboard() {
   $('#qa-sub').addEventListener('click', function () { state.pendingDialog = 'add-sub'; location.hash = '#/subs'; });
   $('#qa-tpl').addEventListener('click', function () { state.pendingDialog = 'add-tpl'; location.hash = '#/templates'; });
   $('#qa-refresh').addEventListener('click', renderDashboard);
+}
+
+function nodeRowHtml(n) {
+  var chips = (n.GroupNodes || []).map(function (g) { return '<span class="chip">' + esc(g.Name) + '</span>'; }).join('') || '<span class="dim">—</span>';
+  return '<tr data-id="' + n.ID + '"><td><b>' + esc(n.Name || '(未命名)') + '</b></td><td>' + chips +
+    '</td><td><span class="mono truncate" title="' + esc(n.Link) + '">' + esc(n.Link) + '</span></td>' +
+    '<td class="ops"><button class="iconbtn sm" data-act="edit" aria-label="编辑">' + icon('edit', 14) +
+    '</button><button class="iconbtn sm danger" data-act="del" aria-label="删除">' + icon('trash', 14) + '</button></td></tr>';
 }
 
 async function renderNodes() {
