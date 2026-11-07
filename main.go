@@ -77,7 +77,7 @@ func main() {
 	var port = config.Port        // 读取端口号
 	// 获取版本号
 	var Isversion bool
-	version = "0.3"
+	version = "0.4"
 	flag.BoolVar(&Isversion, "version", false, "显示版本号")
 	flag.Parse()
 	if Isversion {
@@ -137,6 +137,8 @@ func Run(port int) {
 	r.Static("/avatars", "./db/avatars")
 	// 设置模板路径
 	r.GET("/", func(c *gin.Context) {
+		// HTML 禁用缓存，确保程序更新后浏览器立即加载新版本
+		c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
 		data, err := fs.ReadFile(staticFiles, "index.html")
 		if err != nil {
 			c.Error(err)

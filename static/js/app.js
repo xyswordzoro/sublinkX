@@ -835,19 +835,22 @@ async function renderSettings() {
   var tgConfigured = tgInfo && tgInfo.configured;
 
   view.innerHTML =
-    '<section class="tile" style="grid-column:span 6"><header class="tile-head"><h3>账号信息</h3></header>' +
-    '<div style="display:flex; align-items:center; gap:14px; padding:6px 0 14px">' +
+    '<section class="tile" style="grid-column:span 6"><span class="strip c-blue"></span>' +
+    '<header class="tile-head" style="border-bottom:1px solid var(--border);padding-bottom:12px">' +
+    '<span class="head-ic blue">' + icon('check', 15) + '</span><h3>账号信息</h3>' +
+    '<span class="head-badge">' + ((me.roles || [])[0] || 'ADMIN') + '</span>' +
+    '</header>' +
+    '<div style="display:flex; align-items:center; gap:16px; padding:16px 0 18px">' +
     '<label class="avatar-upload" title="点击更换头像">' +
     (me.avatar ? '<img class="avatar avatar-lg avatar-img" src="' + esc(me.avatar) + '" alt="头像"/>'
                : '<span class="avatar avatar-lg">' + esc((me.username || 'A').charAt(0).toUpperCase()) + '</span>') +
     '<input id="f-avatar" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden/>' +
     '</label>' +
-    '<div><p style="font-size:15px;font-weight:500">' + esc(me.username || '') + '</p>' +
-    '<p style="font-size:12px;color:var(--muted)">' + esc(me.nickname || '') + ' · ' + (me.roles || []).join(', ') + '</p>' +
-    '<p style="font-size:11px;color:var(--muted)">点击头像更换（png / jpg / webp / gif，≤ 2MB）</p></div></div>' +
+    '<div><p style="font-size:17px;font-weight:600">' + esc(me.username || '') + '</p>' +
+    '<p style="font-size:12px;color:var(--muted);margin-top:2px">' + esc(me.nickname || '') + '</p></div></div>' +
     '<div class="sys-row"><span>用户 ID</span><b>' + esc(me.userId == null ? '—' : me.userId) + '</b></div>' +
-    '<div class="sys-row"><span>程序版本</span><b>v' + esc(state.version || '2.1') + '</b></div>' +
     '<div class="sys-row"><span>服务地址</span><b>' + esc(location.host) + '</b></div>' +
+    '<div class="tile-foot"><span>点击头像可更换（png / jpg / webp / gif，≤ 2MB）</span></div>' +
     '</section>' +
     '<section class="tile" style="grid-column:span 6"><header class="tile-head"><h3>修改账号密码</h3></header>' +
     '<form id="pwd-form" style="max-width:340px">' +
