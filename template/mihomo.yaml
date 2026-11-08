@@ -1,0 +1,145 @@
+# SublinkX 精简版 mihomo 模板
+# 策略组：节点选择 / 自动选择 / AI节点 / 全球直连 / 全球拦截 / 漏网之鱼
+# 节点由 SublinkX 自动注入到「节点选择」「AI节点」「漏网之鱼」
+
+mixed-port: 7890
+allow-lan: true
+bind-address: "*"
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+log-level: info
+keep-alive-idle: 600
+keep-alive-interval: 15
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+external-controller: 0.0.0.0:9090
+secret: ""
+external-ui: ui
+external-ui-name: zashboard
+external-ui-url: "https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
+
+geox-url:
+  mmdb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+
+ntp:
+  enable: true
+  write-to-system: true
+
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack: ["any:53", "tcp://any:53"]
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+  route-exclude-address-set:
+    - cn_ip
+
+sniffer:
+  enable: true
+  override-destination: false
+  force-dns-mapping: false
+  parse-pure-ip: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - "Mijia Cloud"
+    - "+.push.apple.com"
+
+dns:
+  enable: true
+  cache-algorithm: arc
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-ttl: 1
+  fake-ip-range: 198.18.0.0/16
+  fake-ip-filter-mode: blacklist
+  default-nameserver:
+    - https://223.5.5.5/dns-query
+  proxy-server-nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  nameserver-policy:
+    "rule-set:cn_domain,private_domain,fakeipfilter_cn,steamcn_domain,microsoftcn_domain,applecn_domain":
+      - https://dns.alidns.com/dns-query#disable-qtype-65=true
+      - https://doh.pub/dns-query#disable-qtype-65=true
+    "rule-set:fakeipfilter_!cn":
+      - https://8.8.8.8/dns-query#节点选择&disable-qtype-65=true
+  nameserver:
+    - https://8.8.8.8/dns-query#节点选择&ecs=223.5.5.0/24
+  fallback:
+    - https://8.8.8.8/dns-query#节点选择
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+  fake-ip-filter:
+    - rule-set:fakeipfilter_cn
+    - rule-set:fakeipfilter_!cn
+    - rule-set:private_domain
+    - rule-set:cn_domain
+    - rule-set:microsoftcn_domain
+    - rule-set:applecn_domain
+    - rule-set:steamcn_domain
+
+# 策略组说明：
+# 节点选择 / AI节点 / 漏网之鱼：SublinkX 自动注入全部节点
+# 自动选择：include-all 自动测速选最快（排除订阅信息类节点）
+# 全球直连 / 全球拦截：仅 DIRECT / REJECT（filter 防止节点被注入）
+proxy-groups:
+  - {name: 节点选择, type: select, proxies: [自动选择, DIRECT], icon: "https://raw.githubusercontent.com/s0lnce/mofish-icon/refs/heads/main/mihomo/pure/corner/select.png"}
+  - {name: 自动选择, type: url-test, include-all: true, exclude-filter: "官网|剩余|流量|套餐|订阅|到期|直连|Expire|Traffic", tolerance: 50, interval: 300, lazy: true, url: "https://www.gstatic.com/generate_204", icon: "https://raw.githubusercontent.com/s0lnce/mofish-icon/refs/heads/main/mihomo/pure/corner/auto.png"}
+  - {name: AI节点, type: select, proxies: [节点选择, DIRECT], icon: "https://raw.githubusercontent.com/s0lnce/mofish-icon/refs/heads/main/mihomo/pure/corner/ai.png"}
+  - {name: 全球直连, type: select, proxies: [DIRECT], filter: "(?!)SublinkXDirectOnly", icon: "https://raw.githubusercontent.com/s0lnce/mofish-icon/refs/heads/main/mihomo/pure/corner/home_broadband.png"}
+  - {name: 全球拦截, type: select, proxies: [REJECT, DIRECT], filter: "(?!)SublinkXRejectOnly", icon: "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Reject.png"}
+  - {name: 漏网之鱼, type: select, proxies: [节点选择, 全球直连, DIRECT], icon: "https://raw.githubusercontent.com/s0lnce/mofish-icon/refs/heads/main/mihomo/pure/corner/final.png"}
+
+rules:
+  - RULE-SET,ads_domain,全球拦截
+  - RULE-SET,private_ip,全球直连,no-resolve
+  - RULE-SET,private_domain,全球直连
+  - RULE-SET,ai_domain,AI节点
+  - RULE-SET,youtube_domain,节点选择
+  - RULE-SET,google_domain,节点选择
+  - RULE-SET,github_domain,节点选择
+  - RULE-SET,telegram_domain,节点选择
+  - RULE-SET,netflix_domain,节点选择
+  - RULE-SET,tiktok_domain,节点选择
+  - RULE-SET,steam_domain,节点选择
+  - RULE-SET,microsoft_domain,节点选择
+  - RULE-SET,apple_domain,节点选择
+  - RULE-SET,cn_domain,全球直连
+  - RULE-SET,cn_ip,全球直连
+  - MATCH,漏网之鱼
+
+rule-providers:
+  ads_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ads-all.mrs"}
+  fakeipfilter_cn: {type: http, interval: 86400, behavior: domain, format: text, url: "https://raw.githubusercontent.com/qichiyuhub/rule/refs/heads/main/rules/fakeipfilter-cn.list"}
+  fakeipfilter_!cn: {type: http, interval: 86400, behavior: domain, format: text, url: "https://raw.githubusercontent.com/qichiyuhub/rule/refs/heads/main/rules/fakeipfilter-!cn.list"}
+  private_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/private.mrs"}
+  private_ip: {type: http, interval: 86400, behavior: ipcidr, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/private.mrs"}
+  ai_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ai-!cn.mrs"}
+  youtube_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/youtube.mrs"}
+  google_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/google.mrs"}
+  github_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/github.mrs"}
+  telegram_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/telegram.mrs"}
+  netflix_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/netflix.mrs"}
+  tiktok_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/tiktok.mrs"}
+  steam_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/steam.mrs"}
+  steamcn_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/steam@cn.mrs"}
+  microsoft_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/microsoft.mrs"}
+  microsoftcn_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/microsoft@cn.mrs"}
+  apple_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/apple.mrs"}
+  applecn_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/apple@cn.mrs"}
+  cn_domain: {type: http, interval: 86400, behavior: domain, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/cn.mrs"}
+  cn_ip: {type: http, interval: 86400, behavior: ipcidr, format: mrs, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geoip/cn.mrs"}
