@@ -10,6 +10,27 @@
 
 基于 [gooaclok819/sublink](https://github.com/jaaksii/sublink) 与 [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX) 二次开发，在此**特别感谢原作者 [gooaclok819](https://github.com/gooaclok819)** 的开源工作。本项目在其基础上重写了前端 UI、修复了若干后端问题，并新增了 Telegram Bot 等功能。
 
+## 📸 界面预览
+
+**仪表盘 · 浅色 / 深色（自动切换）**
+
+![仪表盘浅色](docs/screenshots/dashboard-light.png)
+![仪表盘深色](docs/screenshots/dashboard-dark.png)
+
+**节点国家分布 · 协议分布 · 快捷操作**
+
+![节点国家分布](docs/screenshots/dashboard-light.png#tile-country)
+
+**节点管理 · 订阅管理**
+
+![节点管理](docs/screenshots/nodes.png)
+![订阅管理](docs/screenshots/subscriptions.png)
+
+**系统设置 · 登录页**
+
+![系统设置](docs/screenshots/settings.png)
+![登录页](docs/screenshots/login.png)
+
 ## ✨ 特性
 
 - 🎨 **现代彩色 UI**：Bento Grid 仪表盘、浅色/深色主题自动切换（可手动切换）、毛玻璃顶栏
