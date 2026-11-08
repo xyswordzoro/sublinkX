@@ -867,7 +867,7 @@ async function renderSettings() {
     (tgConfigured && tgInfo.chatId ? '当前绑定会话 ID：<code>' + esc(String(tgInfo.chatId)) + '</code>' : '') +
     '</p>' +
     '<form id="tg-form" style="max-width:560px">' +
-    '<label class="field"><span>Bot Token *</span><input id="f-tg-token" class="input mono" placeholder="如 123456789:AAxxxx..." value="' + esc(tgConfigured && tgInfo.token ? tgInfo.token : '') + '"/></label>' +
+    '<label class="field"><span>Bot Token' + (tgConfigured ? '（已配置，留空保持不变）' : ' *') + '</span><input id="f-tg-token" class="input mono" autocomplete="off" placeholder="如 123456789:AAxxxx..." value=""/></label>' +
     '<div class="config-grid" style="margin-top:14px">' +
     '<label class="field"><span>订阅链接地址</span><input id="f-tg-host" class="input" placeholder="可含协议前缀，如 https://sub.example.com:2022" value="' + esc(tgConfigured && tgInfo.serverHost ? tgInfo.serverHost : location.host) + '"/></label>' +
     '<label class="field"><span>代理地址（可选）</span><input id="f-tg-proxy" class="input" placeholder="直连留空；如 http://127.0.0.1:7897" value="' + esc(tgConfigured && tgInfo.proxy ? tgInfo.proxy : '') + '"/></label>' +

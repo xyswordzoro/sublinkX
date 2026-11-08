@@ -14,7 +14,8 @@ func TGSet(c *gin.Context) {
 	token := c.PostForm("token")
 	serverHost := c.PostForm("serverHost")
 	proxy := strings.TrimSpace(c.PostForm("proxy"))
-	if token == "" {
+	cfg0 := models.ReadConfig()
+	if token == "" && cfg0.TelegramBotToken == "" {
 		c.JSON(400, gin.H{
 			"code": "00001",
 			"msg":  "bot token 不能为空",
@@ -22,7 +23,7 @@ func TGSet(c *gin.Context) {
 		return
 	}
 	// 简单校验 token 格式：数字:字符串
-	if len(token) < 10 {
+	if token != "" && len(token) < 10 {
 		c.JSON(400, gin.H{
 			"code": "00001",
 			"msg":  "bot token 格式不正确",
@@ -35,6 +36,10 @@ func TGSet(c *gin.Context) {
 			"msg":  "代理地址格式不正确，应为 http://host:port 或 socks5://host:port",
 		})
 		return
+	}
+	if token == "" && cfg0.TelegramBotToken != "" {
+		// token 留空：保持已配置的 token 不变，仅更新其他字段
+		token = cfg0.TelegramBotToken
 	}
 	cfg := models.ReadConfig()
 	cfg.TelegramBotToken = token
@@ -49,7 +54,15 @@ func TGSet(c *gin.Context) {
 	})
 }
 
-// TGInfo 获取当前 Telegram Bot 配置状态
+// maskToken 脱敏显示 token，避免泄露
+func maskToken(token string) string {
+	if len(token) <= 12 {
+		return "****"
+	}
+	return token[:6] + "****" + token[len(token)-4:]
+}
+
+// TGInfo 获取当前 Telegram Bot 配置状态（token 脱敏返回）
 func TGInfo(c *gin.Context) {
 	cfg := models.ReadConfig()
 	info := gin.H{
@@ -57,7 +70,7 @@ func TGInfo(c *gin.Context) {
 	}
 	if cfg.TelegramBotToken != "" {
 		info["botId"] = splitToken(cfg.TelegramBotToken)
-		info["token"] = cfg.TelegramBotToken
+		info["tokenMasked"] = maskToken(cfg.TelegramBotToken)
 		info["serverHost"] = cfg.TelegramServerHost
 		info["chatId"] = cfg.TelegramChatID
 		info["proxy"] = cfg.TelegramProxy
