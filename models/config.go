@@ -24,6 +24,8 @@ type Config struct {
 	TelegramChatID    int64  `yaml:"telegram_chat_id"`   // 授权的 Telegram 会话 ID（首次使用自动绑定）
 	TelegramServerHost string `yaml:"telegram_server_host"` // 订阅链接中的服务器地址（如 example.com:8000）
 	TelegramProxy     string `yaml:"telegram_proxy"`     // 访问 Telegram API 的代理（如 http://127.0.0.1:7897，留空直连）
+	LatencyTestURL    string `yaml:"latency_test_url"`   // 延迟测试 URL
+	LatencyTimeoutMS  int    `yaml:"latency_timeout_ms"` // 延迟测试超时（毫秒）
 }
 
 var comment string = `# jwt_secret: JWT密钥
@@ -32,6 +34,8 @@ var comment string = `# jwt_secret: JWT密钥
 # telegram_bot_token: Telegram Bot Token（通过 @BotFather 创建获取）
 # telegram_chat_id: 授权的 Telegram 会话 ID，为空时首次对话自动绑定
 # telegram_proxy: 访问 Telegram API 的代理，如 http://127.0.0.1:7897 或 socks5://127.0.0.1:7891，留空直连
+# latency_test_url: 延迟测试 URL
+# latency_timeout_ms: 延迟测试超时（毫秒）
 `
 
 // 初始化配置
@@ -97,6 +101,12 @@ func SetConfig(newCfg Config) {
 	}
 	if newCfg.TelegramProxy != "" {
 		oldCfg.TelegramProxy = newCfg.TelegramProxy
+	}
+	if newCfg.LatencyTestURL != "" {
+		oldCfg.LatencyTestURL = newCfg.LatencyTestURL
+	}
+	if newCfg.LatencyTimeoutMS > 0 {
+		oldCfg.LatencyTimeoutMS = newCfg.LatencyTimeoutMS
 	}
 	WriteConfig(oldCfg)
 }

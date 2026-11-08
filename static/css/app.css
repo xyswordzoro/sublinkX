@@ -209,7 +209,8 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
 }
 
 /* ---------- 玻璃顶栏 ---------- */
-.main{ padding:14px 24px 28px; display:flex; flex-direction:column; gap:18px; min-width:0 }
+.main{ padding:14px 24px 28px; display:flex; flex-direction:column; gap:18px; min-width:0; max-width:1640px }
+.top, .bento{ width:100%; max-width:1600px; margin-left:auto; margin-right:auto }
 .top{
   display:flex; align-items:center; gap:14px;
   padding:4px 0 14px;
@@ -303,8 +304,13 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
 .kpi-delta.up{ color:var(--green); background:var(--green-soft) }
 .kpi-delta.down{ color:var(--red); background:var(--red-soft) }
 .kpi-delta.flat{ color:var(--muted); background:var(--surface-2) }
-.kpi-spark{ margin:12px -22px -20px; width:calc(100% + 44px); display:block; opacity:.9 }
-.kpi-foot{ display:flex; justify-content:flex-end; padding:8px 0 0; border-top:1px solid var(--border); margin-top:12px; font-size:11.5px; color:var(--muted); font-weight:500 }
+.kpi-spark{ display:block }
+.kpi-foot{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  border-top:1px solid var(--border); margin-top:14px; padding-top:12px;
+}
+.kpi-foot svg{ width:132px; height:34px; flex:none; opacity:.9 }
+.kpi-foot-text{ font-size:11.5px; color:var(--muted); font-weight:500; margin-left:auto }
 
 /* 国家分布渐变进度条 */
 .c-row{ margin-bottom:13px }
@@ -394,6 +400,15 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
 }
 .chip.neutral{ background:var(--surface-2); color:var(--muted) }
 .chip + .chip{ margin-left:5px }
+
+.lat-badge{
+  display:inline-flex; align-items:center; font-size:11.5px; font-weight:600;
+  border-radius:999px; padding:2px 10px; font-variant-numeric:tabular-nums;
+}
+.lat-badge.dim{ color:var(--muted); background:var(--surface-2) }
+.lat-good{ color:var(--green); background:var(--green-soft) }
+.lat-mid{ color:var(--orange); background:light-dark(rgba(245,158,11,.12), rgba(251,191,36,.16)) }
+.lat-slow, .lat-bad{ color:var(--red); background:var(--red-soft) }
 
 .mini-btn{
   font-size:11px; font-weight:500; padding:3px 10px; margin-left:5px; border-radius:8px;

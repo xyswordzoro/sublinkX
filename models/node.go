@@ -19,6 +19,7 @@ type Node struct {
 	ID         int
 	Name       string
 	Link       string
+	Latency    int // 延迟毫秒：0=未测，-1=超时/失败
 	GroupNodes []GroupNode `gorm:"many2many:group_node_nodes"` // 反向关联字段
 }
 

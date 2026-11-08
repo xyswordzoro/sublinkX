@@ -323,8 +323,7 @@ function kpiCard(cfg) {
     '<div class="kpi-value-row"><span class="kpi-value">' + cfg.value + '</span>' + (cfg.delta || '') + '</div></div>' +
     '<span class="kpi-ic ' + cfg.color + '">' + icon(cfg.icon, 26) + '</span>' +
     '</div>' +
-    sparkline(cfg.spark, cfg.colorVar) +
-    '<div class="kpi-foot"><span>' + cfg.footer + '</span></div>' +
+    '<div class="kpi-foot">' + sparkline(cfg.spark, cfg.colorVar) + '<span class="kpi-foot-text">' + cfg.footer + '</span></div>' +
     '</section>';
 }
 
@@ -510,8 +509,13 @@ async function renderDashboard() {
   }).join('');
   if (!countryRows) countryRows = '<p class="empty">暂无节点</p>';
 
+  /* 连通率：已测节点中可达比例 */
+  var tested = nodes.filter(function (n) { return n.Latency !== 0; });
+  var online = nodes.filter(function (n) { return n.Latency > 0; }).length;
+  var connectRateText = tested.length ? Math.round(online / tested.length * 100) + '% 连通率' : '未测速';
+
   view.innerHTML =
-    kpiCard({ label: '节点总数', value: num(nodes.length), color: 'blue', colorVar: 'var(--blue)', icon: 'server', spark: cumNodes, delta: deltaHtml(pctDelta(nodes.length, nodeBefore), '本周'), footer: '共 ' + groups.length + ' 个分组' }) +
+    kpiCard({ label: '节点总数', value: num(nodes.length), color: 'blue', colorVar: 'var(--blue)', icon: 'server', spark: cumNodes, delta: deltaHtml(pctDelta(nodes.length, nodeBefore), '本周'), footer: connectRateText }) +
     kpiCard({ label: '订阅数', value: num(subs.length), color: 'green', colorVar: 'var(--green)', icon: 'rss', spark: cumSubs, delta: deltaHtml(pctDelta(subs.length, subBefore), '本周'), footer: '累计访问 ' + num(totalVisits) + ' 次' }) +
     kpiCard({ label: '今日订阅请求', value: num(todayCount), color: 'purple', colorVar: 'var(--purple)', icon: 'activity', spark: dailyReqVals, delta: ydDelta, footer: '独立 IP ' + ipSet.size + ' 个' }) +
 
@@ -558,9 +562,15 @@ async function renderDashboard() {
   $('#qa-refresh').addEventListener('click', renderDashboard);
 }
 
+function latencyBadge(v) {
+  if (!v) return '<span class="lat-badge dim">—</span>';
+  if (v < 0) return '<span class="lat-badge lat-bad">超时</span>';
+  var cls = v <= 300 ? 'lat-good' : (v <= 800 ? 'lat-mid' : 'lat-slow');
+  return '<span class="lat-badge ' + cls + '">' + v + ' ms</span>';
+}
+
 function nodeRowHtml(n) {
-  var chips = (n.GroupNodes || []).map(function (g) { return '<span class="chip">' + esc(g.Name) + '</span>'; }).join('') || '<span class="dim">—</span>';
-  return '<tr data-id="' + n.ID + '"><td><b>' + esc(n.Name || '(未命名)') + '</b></td><td>' + chips +
+  return '<tr data-id="' + n.ID + '"><td><b>' + esc(n.Name || '(未命名)') + '</b></td><td>' + latencyBadge(n.Latency) +
     '</td><td><span class="mono truncate" title="' + esc(n.Link) + '">' + esc(n.Link) + '</span></td>' +
     '<td class="ops"><button class="iconbtn sm" data-act="edit" aria-label="编辑">' + icon('edit', 14) +
     '</button><button class="iconbtn sm danger" data-act="del" aria-label="删除">' + icon('trash', 14) + '</button></td></tr>';
@@ -577,8 +587,12 @@ async function renderNodes() {
   view.innerHTML =
     '<div class="page-bar"><input id="node-search" class="input" placeholder="搜索名称、分组、链接…"/>' +
     '<span class="page-count" id="node-count"></span>' +
-    '<button id="btn-add-node" class="btn btn-primary" type="button">' + icon('plus', 15) + '添加节点</button></div>' +
-    '<section class="tile"><table class="table"><thead><tr><th>名称</th><th>分组</th><th>链接</th><th class="ops">操作</th></tr></thead>' +
+    '<div style="margin-left:auto; display:flex; gap:10px">' +
+    '<button id="btn-lat-test" class="btn" type="button">' + icon('activity', 15) + '测速</button>' +
+    '<button id="btn-lat-set" class="btn" type="button">' + icon('settings', 15) + '延迟设置</button>' +
+    '<button id="btn-add-node" class="btn btn-primary" type="button">' + icon('plus', 15) + '添加节点</button>' +
+    '</div></div>' +
+    '<section class="tile"><table class="table"><thead><tr><th>名称</th><th>延迟</th><th>链接</th><th class="ops">操作</th></tr></thead>' +
     '<tbody id="node-rows"></tbody></table><p id="node-empty" class="empty" hidden>暂无节点 · 点击右上角「添加节点」粘贴 ss:// vmess:// 等分享链接</p></section>';
 
   function drawRows(kw) {
@@ -597,6 +611,8 @@ async function renderNodes() {
   $('#node-search').addEventListener('input', function (e) { drawRows(e.target.value); });
 
   $('#btn-add-node').addEventListener('click', openNodeAdd);
+  $('#btn-lat-set').addEventListener('click', openLatencySettings);
+  $('#btn-lat-test').addEventListener('click', runLatencyTest);
   $('#node-rows').addEventListener('click', function (e) {
     var btn = e.target.closest('button[data-act]');
     if (!btn) return;
@@ -612,6 +628,35 @@ async function renderNodes() {
   });
 
   if (state.pendingDialog === 'add-node') { state.pendingDialog = null; openNodeAdd(); }
+}
+
+function openLatencySettings() {
+  dlgOpen('延迟设置',
+    '<label class="field"><span>测试模式</span><input class="input" value="仅延迟测试（更快）" disabled/></label>' +
+    '<label class="field" style="margin-top:14px"><span>延迟测试 URL</span><input id="f-lat-url" class="input" placeholder="https://cp.cloudflare.com/generate_204"/></label>' +
+    '<label class="field" style="margin-top:14px"><span>超时时间（毫秒，1-60000）</span><input id="f-lat-timeout" class="input" type="number" min="1" max="60000" value="3000"/></label>',
+    '保存并测速', async function () {
+      var url = $('#f-lat-url').value.trim();
+      var timeout = parseInt($('#f-lat-timeout').value, 10);
+      await api('/api/v1/nodes/latency/settings', { method: 'POST', form: { url: url, timeout: String(timeout) } });
+      toast('设置已保存，开始测速…', true);
+      runLatencyTest();
+    }, { noFocus: true });
+  api('/api/v1/nodes/latency/settings').then(function (d) {
+    $('#f-lat-url').value = d.data.url;
+    $('#f-lat-timeout').value = d.data.timeout;
+  }).catch(function () {});
+}
+
+async function runLatencyTest() {
+  toast('正在测速，请稍候…', true);
+  try {
+    await api('/api/v1/nodes/latency/test', { method: 'POST' });
+    toast('测速完成', true);
+  } catch (e) {
+    toast('测速失败：' + e.message, false);
+  }
+  renderNodes();
 }
 
 function openNodeAdd() {
@@ -835,7 +880,7 @@ async function renderSettings() {
   var tgConfigured = tgInfo && tgInfo.configured;
 
   view.innerHTML =
-    '<section class="tile" style="grid-column:span 6"><span class="strip c-blue"></span>' +
+    '<section class="tile" style="grid-column:span 6">' +
     '<header class="tile-head" style="border-bottom:1px solid var(--border);padding-bottom:12px">' +
     '<span class="head-ic blue">' + icon('check', 15) + '</span><h3>账号信息</h3>' +
     '<span class="head-badge">' + ((me.roles || [])[0] || 'ADMIN') + '</span>' +
@@ -848,8 +893,6 @@ async function renderSettings() {
     '</label>' +
     '<div><p style="font-size:17px;font-weight:600">' + esc(me.username || '') + '</p>' +
     '<p style="font-size:12px;color:var(--muted);margin-top:2px">' + esc(me.nickname || '') + '</p></div></div>' +
-    '<div class="sys-row"><span>用户 ID</span><b>' + esc(me.userId == null ? '—' : me.userId) + '</b></div>' +
-    '<div class="sys-row"><span>服务地址</span><b>' + esc(location.host) + '</b></div>' +
     '<div class="tile-foot"><span>点击头像可更换（png / jpg / webp / gif，≤ 2MB）</span></div>' +
     '</section>' +
     '<section class="tile" style="grid-column:span 6"><header class="tile-head"><h3>修改账号密码</h3></header>' +
