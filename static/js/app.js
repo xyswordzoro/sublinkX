@@ -569,9 +569,17 @@ function latencyBadge(v) {
   return '<span class="lat-badge ' + cls + '">' + v + ' ms</span>';
 }
 
+function geoBadge(code) {
+  if (!code) return '<span class="dim">—</span>';
+  var lower = esc(code.toLowerCase());
+  return '<span class="geo-flag"><img src="https://flagcdn.com/w40/' + lower + '.png" alt="" onerror="this.style.display=\'none\'"/>' +
+    esc(code) + '</span>';
+}
+
 function nodeRowHtml(n) {
   return '<tr data-id="' + n.ID + '"><td><b>' + esc(n.Name || '(未命名)') + '</b></td><td>' + latencyBadge(n.Latency) +
     '</td><td><span class="mono truncate" title="' + esc(n.Link) + '">' + esc(n.Link) + '</span></td>' +
+    '<td>' + geoBadge(n.Country) + '</td>' +
     '<td class="ops"><button class="iconbtn sm" data-act="edit" aria-label="编辑">' + icon('edit', 14) +
     '</button><button class="iconbtn sm danger" data-act="del" aria-label="删除">' + icon('trash', 14) + '</button></td></tr>';
 }
@@ -589,10 +597,11 @@ async function renderNodes() {
     '<span class="page-count" id="node-count"></span>' +
     '<div style="margin-left:auto; display:flex; gap:10px">' +
     '<button id="btn-lat-test" class="btn" type="button">' + icon('activity', 15) + '测速</button>' +
-    '<button id="btn-lat-set" class="btn" type="button">' + icon('settings', 15) + '延迟设置</button>' +
+    '<button id="btn-geo-test" class="btn" type="button">' + icon('globe', 15) + '国家测试</button>' +
+    '<button id="btn-lat-set" class="btn" type="button">' + icon('settings', 15) + '测速设置</button>' +
     '<button id="btn-add-node" class="btn btn-primary" type="button">' + icon('plus', 15) + '添加节点</button>' +
     '</div></div>' +
-    '<section class="tile"><table class="table"><thead><tr><th>名称</th><th>延迟</th><th>链接</th><th class="ops">操作</th></tr></thead>' +
+    '<section class="tile"><table class="table"><thead><tr><th>名称</th><th>延迟</th><th>链接</th><th>国家</th><th class="ops">操作</th></tr></thead>' +
     '<tbody id="node-rows"></tbody></table><p id="node-empty" class="empty" hidden>暂无节点 · 点击右上角「添加节点」粘贴 ss:// vmess:// 等分享链接</p></section>';
 
   function drawRows(kw) {
@@ -612,6 +621,7 @@ async function renderNodes() {
 
   $('#btn-add-node').addEventListener('click', openNodeAdd);
   $('#btn-lat-set').addEventListener('click', openLatencySettings);
+  $('#btn-geo-test').addEventListener('click', runGeoTest);
   $('#btn-lat-test').addEventListener('click', runLatencyTest);
   $('#node-rows').addEventListener('click', function (e) {
     var btn = e.target.closest('button[data-act]');
@@ -631,21 +641,38 @@ async function renderNodes() {
 }
 
 function openLatencySettings() {
-  dlgOpen('延迟设置',
-    '<label class="field"><span>测试模式</span><input class="input" value="仅延迟测试（更快）" disabled/></label>' +
-    '<label class="field" style="margin-top:14px"><span>延迟测试 URL</span><input id="f-lat-url" class="input" placeholder="https://cp.cloudflare.com/generate_204"/></label>' +
-    '<label class="field" style="margin-top:14px"><span>超时时间（毫秒，1-60000）</span><input id="f-lat-timeout" class="input" type="number" min="1" max="60000" value="3000"/></label>',
-    '保存并测速', async function () {
-      var url = $('#f-lat-url').value.trim();
-      var timeout = parseInt($('#f-lat-timeout').value, 10);
-      await api('/api/v1/nodes/latency/settings', { method: 'POST', form: { url: url, timeout: String(timeout) } });
-      toast('设置已保存，开始测速…', true);
-      runLatencyTest();
+  dlgOpen('测速设置',
+    '<label class="field"><span>延迟测试 URL</span><input id="f-lat-url" class="input" placeholder="https://cp.cloudflare.com/generate_204"/></label>' +
+    '<label class="field" style="margin-top:14px"><span>超时时间（毫秒，1-60000）</span><input id="f-lat-timeout" class="input" type="number" min="1" max="60000" value="3000"/></label>' +
+    '<label class="field" style="margin-top:14px"><span>IP 查询地址（{ip} 占位，返回含 countryCode 的 JSON）</span><input id="f-lat-geo" class="input mono" placeholder="http://ip-api.com/json/{ip}?fields=countryCode"/></label>' +
+    '<p class="pick-hint">国家测试通过节点服务器的 IP 归属查询显示国旗。</p>',
+    '保存', async function () {
+      await api('/api/v1/nodes/latency/settings', {
+        method: 'POST',
+        form: {
+          url: $('#f-lat-url').value.trim(),
+          timeout: $('#f-lat-timeout').value,
+          geoUrl: $('#f-lat-geo').value.trim()
+        }
+      });
+      toast('测速设置已保存', true);
     }, { noFocus: true });
   api('/api/v1/nodes/latency/settings').then(function (d) {
     $('#f-lat-url').value = d.data.url;
     $('#f-lat-timeout').value = d.data.timeout;
+    $('#f-lat-geo').value = d.data.geoUrl;
   }).catch(function () {});
+}
+
+async function runGeoTest() {
+  toast('正在查询节点国家，请稍候…', true);
+  try {
+    await api('/api/v1/nodes/latency/geo', { method: 'POST' });
+    toast('国家测试完成', true);
+  } catch (e) {
+    toast('国家测试失败：' + e.message, false);
+  }
+  renderNodes();
 }
 
 async function runLatencyTest() {
@@ -662,27 +689,24 @@ async function runLatencyTest() {
 function openNodeAdd() {
   dlgOpen('添加节点',
     '<label class="field"><span>节点链接 *</span><textarea id="f-link" class="input" rows="3" placeholder="ss:// 或 vmess:// 等，支持用逗号分隔多条"></textarea></label>' +
-    '<label class="field"><span>名称</span><input id="f-name" class="input" placeholder="留空自动从链接解析"/></label>' +
-    '<label class="field"><span>分组</span><input id="f-group" class="input" placeholder="多个分组用英文逗号分隔，如：香港,美国"/></label>',
+    '<label class="field"><span>名称</span><input id="f-name" class="input" placeholder="留空自动从链接解析"/></label>',
     '添加', async function () {
       var link = $('#f-link').value.trim();
       if (!link || link.indexOf('://') < 0) throw new Error('链接不能为空，且需包含协议头（如 ss://）');
-      await api('/api/v1/nodes/add', { method: 'POST', form: { link: link, name: $('#f-name').value.trim(), group: $('#f-group').value.trim() } });
+      await api('/api/v1/nodes/add', { method: 'POST', form: { link: link, name: $('#f-name').value.trim(), group: '' } });
       toast('添加成功', true);
       renderNodes();
     });
 }
 
 function openNodeEdit(node) {
-  var gs = (node.GroupNodes || []).map(function (g) { return g.Name; }).join(',');
   dlgOpen('编辑节点',
     '<label class="field"><span>名称</span><input id="f-name" class="input" value="' + esc(node.Name) + '"/></label>' +
-    '<label class="field"><span>链接</span><textarea id="f-link" class="input" rows="3">' + esc(node.Link) + '</textarea></label>' +
-    '<label class="field"><span>分组</span><input id="f-group" class="input" value="' + esc(gs) + '" placeholder="多个分组用英文逗号分隔，留空解除分组"/></label>',
+    '<label class="field"><span>链接</span><textarea id="f-link" class="input" rows="3">' + esc(node.Link) + '</textarea></label>',
     '保存', async function () {
       var name = $('#f-name').value.trim(), link = $('#f-link').value.trim();
       if (!name || !link) throw new Error('名称和链接不能为空');
-      await api('/api/v1/nodes/update', { method: 'POST', form: { id: node.ID, name: name, link: link, group: $('#f-group').value.trim() } });
+      await api('/api/v1/nodes/update', { method: 'POST', form: { id: node.ID, name: name, link: link, group: '' } });
       toast('更新成功', true);
       renderNodes();
     });

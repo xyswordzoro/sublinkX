@@ -29,5 +29,6 @@ func Nodes(r *gin.Engine) {
 		Lat.POST("/test", api.NodeLatencyTest)       // 全量测速
 		Lat.GET("/settings", api.LatencySettingsGet) // 获取测速设置
 		Lat.POST("/settings", api.LatencySettingsSet) // 保存测速设置
+		Lat.POST("/geo", api.NodeGeoTest)             // 国家归属测试
 	}
 }

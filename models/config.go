@@ -26,6 +26,7 @@ type Config struct {
 	TelegramProxy     string `yaml:"telegram_proxy"`     // 访问 Telegram API 的代理（如 http://127.0.0.1:7897，留空直连）
 	LatencyTestURL    string `yaml:"latency_test_url"`   // 延迟测试 URL
 	LatencyTimeoutMS  int    `yaml:"latency_timeout_ms"` // 延迟测试超时（毫秒）
+	GeoQueryURL       string `yaml:"geo_query_url"`      // IP 归属国查询地址（{ip} 占位）
 }
 
 var comment string = `# jwt_secret: JWT密钥
@@ -36,6 +37,7 @@ var comment string = `# jwt_secret: JWT密钥
 # telegram_proxy: 访问 Telegram API 的代理，如 http://127.0.0.1:7897 或 socks5://127.0.0.1:7891，留空直连
 # latency_test_url: 延迟测试 URL
 # latency_timeout_ms: 延迟测试超时（毫秒）
+# geo_query_url: IP 归属国查询地址，{ip} 为占位符，需返回含 countryCode 的 JSON
 `
 
 // 初始化配置
@@ -107,6 +109,9 @@ func SetConfig(newCfg Config) {
 	}
 	if newCfg.LatencyTimeoutMS > 0 {
 		oldCfg.LatencyTimeoutMS = newCfg.LatencyTimeoutMS
+	}
+	if newCfg.GeoQueryURL != "" {
+		oldCfg.GeoQueryURL = newCfg.GeoQueryURL
 	}
 	WriteConfig(oldCfg)
 }
