@@ -12,19 +12,25 @@
 
 ## 📸 界面预览
 
-**仪表盘 · 浅色 / 深色（自动切换）**
+**仪表盘 · 浅色 / 深色（跟随系统自动切换）**
 
 ![仪表盘浅色](docs/screenshots/dashboard-light.png)
 ![仪表盘深色](docs/screenshots/dashboard-dark.png)
 
-**节点国家分布 · 协议分布 · 快捷操作**
-
-![节点国家分布](docs/screenshots/dashboard-light.png#tile-country)
-
-**节点管理 · 订阅管理**
+**节点管理 · 延迟测速与国家归属**
 
 ![节点管理](docs/screenshots/nodes.png)
+
+**模板配置 · mihomo YAML 可视化编辑器**
+
+> 策略组卡片式增删改与拖拽排序，规则表格带来源 URL，`rule-providers` 定义随规则一起编辑，无需手写 YAML。
+
+![模板可视化编辑器](docs/screenshots/template-editor.png)
+
+**订阅管理 · 操作日志**
+
 ![订阅管理](docs/screenshots/subscriptions.png)
+![操作日志](docs/screenshots/logs.png)
 
 **系统设置 · 登录页**
 
@@ -37,7 +43,10 @@
 - 📊 **可视化看板**：多序列趋势图（悬停提示）、协议分布环形图、KPI 迷你曲线、动态时间线
 - 🌐 **协议支持**：ss / ssr / vmess / vless / trojan / hysteria / hysteria2 / tuic / **anytls**
 - 📡 **订阅下发**：v2ray base64 通用格式、Clash（mihomo）、Surge，客户端 UA 自动识别，也可用 `&client=clash|surge` 强制指定
-- 🧩 **模板在线编辑**：Clash / Surge 模板在线增删改，支持分组 filter 正则筛选（不被生成节点污染）
+- 🧩 **模板可视化编辑器**：mihomo YAML 结构化编辑 —— 策略组卡片式增删改、拖拽排序、规则表格（含来源 URL 与 `rule-providers` 定义编辑）、实时校验、原始 YAML 兜底，保存时保留 dns/tun/注释等其余配置
+- ⏱ **节点延迟测速**：彩色延迟徽章（≤300ms 绿 / ≤800ms 橙 / 超时红），可自定义测速 URL 与超时时间
+- 🌍 **节点国家识别**：并发查询节点服务器 IP 归属国，表格显示真实国旗
+- 📋 **模板 filter 保护**：仅含 DIRECT/REJECT 的策略组自动跳过节点注入，正则筛选不被污染
 - 🤖 **Telegram Bot**：`/add` 添加节点（同名自动替换）、`/list` 节点列表、`/test` 连通性测试（TCP 并发探测）、`/del` 点击删除、`/sub` 获取订阅链接
 - 🖼 **用户头像**：头像上传，全界面同步显示
 - 📝 **操作日志**：面板 / Telegram / 系统三个来源的关键操作全程留痕
