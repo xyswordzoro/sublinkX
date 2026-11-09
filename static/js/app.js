@@ -235,10 +235,34 @@ async function enterApp() {
   var nick = state.me.nickname || '管理员';
   applyAvatar('top-avatar', state.me);
   document.getElementById('top-uname-name').textContent = nick;
+  var sv = document.getElementById('side-ver');
+  if (sv && state.version) sv.textContent = state.version;
   $('#login-view').hidden = true;
   $('#app-view').hidden = false;
   if (!location.hash) location.hash = '#/dashboard';
   route();
+  checkUpdate();
+  if (!checkUpdate._tm) checkUpdate._tm = setInterval(checkUpdate, 30 * 60 * 1000);
+}
+
+/* ================= 更新检查 ================= */
+// 检查新版本，有更新时在侧栏系统服务卡片显示提示
+async function checkUpdate() {
+  var el = document.getElementById('side-update');
+  if (!el) return;
+  try {
+    var d = await api('/api/v1/version/check');
+    var info = d.data || {};
+    if (info.hasUpdate && info.latest) {
+      document.getElementById('side-update-text').textContent =
+        '新版本 v' + info.latest + ' 可用';
+      el.href = info.url || 'https://github.com/xyswordzoro/sublinkX/releases/latest';
+      el.title = info.notes ? (info.latest + '：' + info.notes) : '打开 Release 页面';
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
+  } catch (e) { /* 检查失败不打扰用户 */ }
 }
 
 /* ================= 路由 ================= */

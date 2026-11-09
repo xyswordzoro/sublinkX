@@ -7,7 +7,7 @@
 <title>SublinkX</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2"/>
 <link rel="icon" href="/static/favicon.ico?v=2"/>
-<link rel="stylesheet" href="/static/css/app.css?v=20261107z"/>
+<link rel="stylesheet" href="/static/css/app.css?v=20261110d"/>
 </head>
 <body>
 
@@ -57,6 +57,9 @@
       <a class="nav-item" data-route="settings" href="#/settings"><i data-icon="settings"></i>系统设置</a>
     </nav>
     <div class="side-status" id="side-status">
+      <a class="side-update" id="side-update" hidden target="_blank" rel="noopener">
+        <span class="su-dot"></span><span id="side-update-text">发现新版本</span><span class="su-go">↗</span>
+      </a>
       <div class="side-status-row">
         <span><span class="pulse-dot"></span>系统服务正常</span>
         <a class="side-gh" href="https://github.com/xyswordzoro/sublinkX" target="_blank" rel="noopener"
@@ -69,7 +72,7 @@
         </a>
       </div>
       <div class="side-status-bar"><span></span></div>
-      <div class="side-status-row"><span>版本 <b>v<span id="side-ver">0.11</span></b></span><span id="side-clock" class="mono">--:--:--</span></div>
+      <div class="side-status-row"><span>版本 <b>v<span id="side-ver">0.12</span></b></span><span id="side-clock" class="mono">--:--:--</span></div>
     </div>
   </aside>
 
@@ -97,6 +100,6 @@
 
 <dialog id="dlg" class="dlg"></dialog>
 <div id="toast" class="toast" hidden></div>
-<script src="/static/js/app.js?v=20261110d"></script>
+<script src="/static/js/app.js?v=20261110e"></script>
 </body>
 </html>

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sublink/api"
 	"sublink/middlewares"
 	"sublink/models"
 	"sublink/routers"
@@ -77,7 +78,7 @@ func main() {
 	var port = config.Port        // 读取端口号
 	// 获取版本号
 	var Isversion bool
-	version = "0.11"
+	version = "0.12"
 	flag.BoolVar(&Isversion, "version", false, "显示版本号")
 	flag.Parse()
 	if Isversion {
@@ -157,6 +158,8 @@ func Run(port int) {
 	routers.Templates(r)
 	routers.Logs(r)
 	routers.Version(r, version)
+	// 异步预热一次更新检查（有新版本时侧栏提示）
+	go api.WarmUpdateCheck()
 	// 记录服务启动
 	models.OpLogAdd("系统", "服务启动", "SublinkX v"+version+" 已启动，监听端口 "+fmt.Sprint(port))
 	// 启动 Telegram Bot（已配置 token 时）
