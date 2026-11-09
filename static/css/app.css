@@ -189,6 +189,16 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
 .side-status-row b{ font-weight:500; color:var(--fg) }
 .pulse-dot{ width:7px; height:7px; border-radius:999px; background:var(--green); display:inline-block; margin-right:6px; animation:pulse 2s infinite }
 @keyframes pulse{ 0%,100%{ opacity:1 } 50%{ opacity:.35 } }
+.side-gh{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:22px; height:22px; border-radius:7px; flex:none;
+  color:var(--muted); border:1px solid var(--border); background:var(--surface);
+  transition:all .18s;
+}
+.side-gh:hover{
+  color:var(--fg); border-color:var(--fg);
+  transform:translateY(-1px); box-shadow:0 3px 10px rgba(23,43,77,.12);
+}
 .side-status-bar{ margin:8px 0 6px; height:5px; border-radius:999px; background:var(--surface-2); overflow:hidden }
 .side-status-bar span{ display:block; height:100%; width:72%; border-radius:999px; background:var(--grad-btn) }
 
