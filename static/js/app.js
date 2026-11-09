@@ -1439,13 +1439,16 @@ async function renderSettings() {
     '</form></section>' +
     '<section class="tile" style="grid-column:1/-1"><header class="tile-head">' +
     '<span class="head-ic blue">' + icon('link', 14) + '</span><h3>Telegram 机器人</h3>' +
-    '<span class="chip ' + (tgConfigured ? '' : 'neutral') + '" style="margin-left:auto">' + (tgConfigured ? '已启用' : '未配置') + '</span>' +
+    '<span class="chip ' + (tgConfigured ? '' : 'neutral') + '" style="margin-left:auto">' +
+      (tgConfigured ? (tgInfo.botId ? '已启用 · Bot ' + esc(tgInfo.botId) : '已启用') : '未配置') + '</span>' +
     '</header>' +
-    '<p style="font-size:12px;color:var(--muted);margin-bottom:12px">通过 @BotFather 创建机器人获取 Token。启用后可在 Telegram 中使用：/add 添加节点、/list 节点列表、/test 连通性测试、/del 删除节点、/sub 获取订阅链接。首次对话自动绑定会话（仅绑定者可用）。' +
-    (tgConfigured && tgInfo.chatId ? '当前绑定会话 ID：<code>' + esc(String(tgInfo.chatId)) + '</code>' : '') +
+    '<p style="font-size:12px;color:var(--muted);margin-bottom:12px">通过 @BotFather 创建机器人获取 Token。启用后可在 Telegram 中使用：/add 添加节点、/list 节点列表、/test 连通性测试、/del 删除节点、/sub 获取订阅链接。' +
+    (tgConfigured ? (tgInfo.chatBound ? '已绑定会话，仅该会话可操作。' : '尚未绑定会话，首次对话的账号将自动绑定。') : '') +
     '</p>' +
     '<form id="tg-form" style="max-width:560px">' +
-    '<label class="field"><span>Bot Token' + (tgConfigured ? '（已配置，留空保持不变）' : ' *') + '</span><input id="f-tg-token" class="input mono" autocomplete="off" placeholder="如 123456789:AAxxxx..." value=""/></label>' +
+    '<label class="field"><span>Bot Token' + (tgConfigured ? '（已配置，留空保持不变）' : ' *') + '</span><input id="f-tg-token" class="input mono" autocomplete="off" placeholder="' +
+      (tgConfigured && tgInfo.tokenMasked ? '当前：' + esc(tgInfo.tokenMasked) + '（输入新值可替换）' : '如 123456789:AAxxxx...') +
+      '" value=""/></label>' +
     '<div class="config-grid" style="margin-top:14px">' +
     '<label class="field"><span>订阅链接地址</span><input id="f-tg-host" class="input" placeholder="可含协议前缀，如 https://sub.example.com:2022" value="' + esc(tgConfigured && tgInfo.serverHost ? tgInfo.serverHost : location.host) + '"/></label>' +
     '<label class="field"><span>代理地址（可选）</span><input id="f-tg-proxy" class="input" placeholder="直连留空；如 http://127.0.0.1:7897" value="' + esc(tgConfigured && tgInfo.proxy ? tgInfo.proxy : '') + '"/></label>' +

@@ -47,7 +47,7 @@ func TGSet(c *gin.Context) {
 	cfg.TelegramProxy = proxy // 显式覆盖，允许清空
 	models.WriteConfig(cfg)
 	telegram.Start(token)
-	models.OpLogAdd("面板", "保存 Telegram 配置", "bot: "+splitToken(token)+", 代理: "+proxy)
+	models.OpLogAdd("面板", "保存 Telegram 配置", "bot: "+maskToken(token)+", 代理: "+proxy)
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"msg":  "Telegram Bot 配置已保存并生效",
@@ -72,7 +72,7 @@ func TGInfo(c *gin.Context) {
 		info["botId"] = splitToken(cfg.TelegramBotToken)
 		info["tokenMasked"] = maskToken(cfg.TelegramBotToken)
 		info["serverHost"] = cfg.TelegramServerHost
-		info["chatId"] = cfg.TelegramChatID
+		info["chatBound"] = cfg.TelegramChatID != 0 // 仅告知是否已绑定，不暴露会话 ID
 		info["proxy"] = cfg.TelegramProxy
 	}
 	c.JSON(200, gin.H{
