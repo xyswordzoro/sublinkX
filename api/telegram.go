@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strconv"
 	"strings"
 
 	"sublink/models"
@@ -14,6 +15,7 @@ func TGSet(c *gin.Context) {
 	token := c.PostForm("token")
 	serverHost := c.PostForm("serverHost")
 	proxy := strings.TrimSpace(c.PostForm("proxy"))
+	chatIDStr := strings.TrimSpace(c.PostForm("chatId"))
 	cfg0 := models.ReadConfig()
 	if token == "" && cfg0.TelegramBotToken == "" {
 		c.JSON(400, gin.H{
@@ -45,6 +47,15 @@ func TGSet(c *gin.Context) {
 	cfg.TelegramBotToken = token
 	cfg.TelegramServerHost = serverHost
 	cfg.TelegramProxy = proxy // 显式覆盖，允许清空
+	// 授权用户 ID：有值则覆盖（0 表示解除绑定、恢复首次自动绑定）
+	if chatIDStr != "" {
+		v, err := strconv.ParseInt(chatIDStr, 10, 64)
+		if err != nil || (v != 0 && (v < 1000 || v > 9999999999999)) {
+			c.JSON(400, gin.H{"code": "00001", "msg": "用户 ID 格式不正确"})
+			return
+		}
+		cfg.TelegramChatID = v
+	}
 	models.WriteConfig(cfg)
 	telegram.Start(token)
 	models.OpLogAdd("面板", "保存 Telegram 配置", "bot: "+maskToken(token)+", 代理: "+proxy)
@@ -72,7 +83,8 @@ func TGInfo(c *gin.Context) {
 		info["botId"] = splitToken(cfg.TelegramBotToken)
 		info["tokenMasked"] = maskToken(cfg.TelegramBotToken)
 		info["serverHost"] = cfg.TelegramServerHost
-		info["chatBound"] = cfg.TelegramChatID != 0 // 仅告知是否已绑定，不暴露会话 ID
+		info["chatBound"] = cfg.TelegramChatID != 0
+		info["chatId"] = cfg.TelegramChatID // 管理员设置项需要可见/可改
 		info["proxy"] = cfg.TelegramProxy
 	}
 	c.JSON(200, gin.H{

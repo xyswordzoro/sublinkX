@@ -29,7 +29,9 @@ var ICONS = {
   globe: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
   pie: '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
   zap2: '<polygon points="13 2 3 14 10 14 11 22 21 10 14 10 15 2"/>',
-  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'
 };
 function icon(name, size) {
   size = size || 17;
@@ -741,7 +743,6 @@ async function renderSubs() {
       '<td><span class="mono truncate" title="' + esc(subLink(s.Name)) + '">/c/?token=' + md5(s.Name) + '</span>' +
       '<button class="mini-btn" data-act="copy" title="复制通用链接（v2ray 格式）">通用</button>' +
       '<button class="mini-btn" data-act="copy-clash" title="复制 Clash 完整配置链接">Clash</button>' +
-      '<button class="mini-btn" data-act="copy-surge" title="复制 Surge 完整配置链接">Surge</button>' +
       '<button class="mini-btn" data-act="open" title="打开 Clash 配置查看">打开</button></td>' +
       '<td class="ops"><button class="iconbtn sm" data-act="edit" aria-label="编辑">' + icon('edit', 14) +
       '</button><button class="iconbtn sm danger" data-act="del" aria-label="删除">' + icon('trash', 14) + '</button></td></tr>';
@@ -764,7 +765,6 @@ async function renderSubs() {
     switch (btn.dataset.act) {
       case 'copy': copyText(subLink(sub.Name)); break;
       case 'copy-clash': copyText(subLink(sub.Name) + '&client=clash'); break;
-      case 'copy-surge': copyText(subLink(sub.Name) + '&client=surge'); break;
       case 'open': window.open('/c/?token=' + md5(sub.Name) + '&client=clash', '_blank'); break;
       case 'edit': openSubDlg(sub); break;
       case 'del':
@@ -780,14 +780,11 @@ async function renderSubs() {
   if (state.pendingDialog === 'add-sub') { state.pendingDialog = null; openSubDlg(null); }
 }
 
-function subDlgBody(name, clash, surge, udp, cert) {
+function subDlgBody(name, clash, udp, cert) {
   return '<label class="field"><span>订阅名称 *</span><input id="f-subname" class="input" value="' + esc(name || '') + '" placeholder="订阅名"/>' +
     '</label>' +
     '<p class="pick-hint">订阅自动包含全部节点（当前 <b>' + state.nodes.length + '</b> 个），后续新增/删除节点无需修改订阅。</p>' +
-    '<div class="config-grid">' +
     '<label class="field"><span>Clash 模板</span><input id="f-clash" class="input" value="' + esc(clash || 'clash.yaml') + '"/></label>' +
-    '<label class="field"><span>Surge 模板</span><input id="f-surge" class="input" value="' + esc(surge || 'surge.conf') + '"/></label>' +
-    '</div>' +
     '<div style="display:flex; gap:20px; margin-top:4px">' +
     '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="f-udp"' + (udp ? ' checked' : '') + '/>允许 UDP</label>' +
     '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="f-cert"' + (cert ? ' checked' : '') + '/>跳过证书验证</label>' +
@@ -808,14 +805,13 @@ async function openSubDlg(sub) {
   if (isEdit) { try { cfg = JSON.parse(sub.Config || '{}'); } catch (e) {} }
 
   dlgOpen(isEdit ? '编辑订阅' : '新建订阅',
-    subDlgBody(sub ? sub.Name : '', cfg.clash, cfg.surge, cfg.udp, cfg.cert),
+    subDlgBody(sub ? sub.Name : '', cfg.clash, cfg.udp, cfg.cert),
     isEdit ? '保存' : '创建', async function () {
       var name = $('#f-subname').value.trim();
       if (!name) throw new Error('订阅名称不能为空');
       if (!state.nodes.length) throw new Error('暂无节点，请先到节点管理添加节点');
       var config = JSON.stringify({
         clash: $('#f-clash').value.trim() || 'clash.yaml',
-        surge: $('#f-surge').value.trim() || 'surge.conf',
         udp: $('#f-udp').checked,
         cert: $('#f-cert').checked
       });
@@ -1430,7 +1426,8 @@ async function renderSettings() {
     '<p style="font-size:12px;color:var(--muted);margin-top:2px">' + esc(me.nickname || '') + '</p></div></div>' +
     '<div class="tile-foot"><span>点击头像可更换（png / jpg / webp / gif，≤ 2MB）</span></div>' +
     '</section>' +
-    '<section class="tile" style="grid-column:span 6"><header class="tile-head"><h3>修改账号密码</h3></header>' +
+    '<section class="tile" style="grid-column:span 6"><header class="tile-head">' +
+    '<span class="head-ic blue">' + icon('lock', 15) + '</span><h3>修改账号密码</h3></header>' +
     '<form id="pwd-form" style="max-width:340px">' +
     '<label class="field"><span>新账号</span><input id="f-user" class="input" value="' + esc(me.username || '') + '" required/></label>' +
     '<label class="field" style="margin-top:14px"><span>新密码</span><input id="f-pass" class="input" type="password" required/></label>' +
@@ -1440,15 +1437,18 @@ async function renderSettings() {
     '<section class="tile" style="grid-column:1/-1"><header class="tile-head">' +
     '<span class="head-ic blue">' + icon('link', 14) + '</span><h3>Telegram 机器人</h3>' +
     '<span class="chip ' + (tgConfigured ? '' : 'neutral') + '" style="margin-left:auto">' +
-      (tgConfigured ? (tgInfo.botId ? '已启用 · Bot ' + esc(tgInfo.botId) : '已启用') : '未配置') + '</span>' +
+      (tgConfigured ? '已启用' : '未配置') + '</span>' +
     '</header>' +
     '<p style="font-size:12px;color:var(--muted);margin-bottom:12px">通过 @BotFather 创建机器人获取 Token。启用后可在 Telegram 中使用：/add 添加节点、/list 节点列表、/test 连通性测试、/del 删除节点、/sub 获取订阅链接。' +
-    (tgConfigured ? (tgInfo.chatBound ? '已绑定会话，仅该会话可操作。' : '尚未绑定会话，首次对话的账号将自动绑定。') : '') +
+    (tgConfigured ? (tgInfo.chatBound ? '当前已指定授权用户，其他账号发消息会被拒绝。' : '未指定授权用户，首次对话的账号将自动绑定。') : '') +
     '</p>' +
     '<form id="tg-form" style="max-width:560px">' +
     '<label class="field"><span>Bot Token' + (tgConfigured ? '（已配置，留空保持不变）' : ' *') + '</span><input id="f-tg-token" class="input mono" autocomplete="off" placeholder="' +
       (tgConfigured && tgInfo.tokenMasked ? '当前：' + esc(tgInfo.tokenMasked) + '（输入新值可替换）' : '如 123456789:AAxxxx...') +
       '" value=""/></label>' +
+    '<label class="field" style="margin-top:14px"><span>授权用户 ID（留空则首次对话自动绑定）</span>' +
+    '<input id="f-tg-chatid" class="input mono" autocomplete="off" placeholder="如 123456789，填 0 可解除绑定" value="' +
+    esc(tgConfigured && tgInfo.chatId ? String(tgInfo.chatId) : '') + '"/></label>' +
     '<div class="config-grid" style="margin-top:14px">' +
     '<label class="field"><span>订阅链接地址</span><input id="f-tg-host" class="input" placeholder="可含协议前缀，如 https://sub.example.com:2022" value="' + esc(tgConfigured && tgInfo.serverHost ? tgInfo.serverHost : location.host) + '"/></label>' +
     '<label class="field"><span>代理地址（可选）</span><input id="f-tg-proxy" class="input" placeholder="直连留空；如 http://127.0.0.1:7897" value="' + esc(tgConfigured && tgInfo.proxy ? tgInfo.proxy : '') + '"/></label>' +
@@ -1506,7 +1506,8 @@ async function renderSettings() {
         form: {
           token: $('#f-tg-token').value.trim(),
           serverHost: $('#f-tg-host').value.trim(),
-          proxy: $('#f-tg-proxy').value.trim()
+          proxy: $('#f-tg-proxy').value.trim(),
+          chatId: $('#f-tg-chatid').value.trim()
         }
       });
       toast('Telegram Bot 已保存并生效，去 Telegram 给机器人发 /start 试试', true);

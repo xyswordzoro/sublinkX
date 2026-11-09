@@ -172,10 +172,13 @@ func DecodeSurge(proxys, groups []string, file string) (string, error) {
 			return "", err
 		}
 	} else {
+		if file == "" {
+			return "", fmt.Errorf("Surge 模板未配置")
+		}
 		surge, err = ReadTemplateFile(file)
 		if err != nil {
 			log.Println(err)
-			return "", err
+			return "", fmt.Errorf("Surge 模板不存在：%s", file)
 		}
 	}
 
