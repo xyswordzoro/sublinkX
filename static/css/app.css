@@ -500,3 +500,125 @@ input[type="checkbox"]{ accent-color:var(--primary); width:15px; height:15px }
   .kpi{ grid-column:1/-1 }
   .top-uname{ display:none }
 }
+
+/* ---------- 模板可视化编辑器 ---------- */
+.tpl-layout{ grid-column:1/-1; display:grid; grid-template-columns:214px minmax(0,1fr); gap:14px; align-items:start }
+.tpl-side{ grid-column:auto; padding:10px; display:flex; flex-direction:column; gap:6px }
+.tpl-side-h{ display:flex; align-items:center; gap:8px; padding:2px 6px 8px; border-bottom:1px solid var(--border); font-size:12px; font-weight:600 }
+.tpl-side-h span{ margin-left:auto; font-size:10px; color:var(--muted); background:var(--surface-2); border-radius:999px; padding:1px 7px }
+.tpl-file{ display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:9px; cursor:pointer; border:1px solid transparent; transition:all .16s }
+.tpl-file:hover{ background:var(--surface-2) }
+.tpl-file.on{ background:var(--primary-soft); border-color:var(--primary-soft) }
+.tpl-ico{ width:22px; height:22px; border-radius:6px; flex:none; display:flex; align-items:center; justify-content:center;
+  font-size:10px; font-weight:700; color:#fff; background:var(--grad-btn) }
+.tpl-fname{ font-size:11.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 }
+.tpl-del{ width:20px; height:20px; border:none; background:transparent; color:var(--muted); border-radius:5px; cursor:pointer; opacity:0; flex:none }
+.tpl-file:hover .tpl-del{ opacity:1 }
+.tpl-del:hover{ color:var(--red); background:var(--red-soft) }
+
+.tpl-main{ min-width:0 }
+.tpl-editor{ padding:0 }
+.tpl-head{ display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap }
+.tpl-title{ display:flex; flex-direction:column; gap:1px; min-width:0 }
+.tpl-title b{ font-size:14px; font-weight:600 }
+.tpl-meta{ font-size:10.5px; color:var(--muted) }
+.tpl-tabs{ display:flex; background:var(--surface-2); border-radius:9px; padding:2px; gap:2px }
+.tpl-tabs button{ font:inherit; font-size:11.5px; font-weight:500; padding:5px 12px; border:none; border-radius:7px;
+  background:transparent; color:var(--muted); cursor:pointer; transition:all .16s }
+.tpl-tabs button.on{ background:var(--surface); color:var(--fg); font-weight:600; box-shadow:0 1px 4px rgba(23,43,77,.08) }
+.tpl-chip{ font-size:10.5px; font-weight:600; padding:4px 10px; border-radius:999px }
+.tpl-chip.ok{ color:var(--green); background:var(--green-soft) }
+.tpl-chip.bad{ color:var(--orange); background:light-dark(rgba(245,158,11,.12), rgba(251,191,36,.16)) }
+.tpl-head .btn{ margin-left:auto }
+
+.tpl-body{ padding:14px 16px 16px; display:flex; flex-direction:column; gap:14px }
+.tpl-warn{ font-size:11.5px; color:var(--orange); background:light-dark(rgba(245,158,11,.1), rgba(251,191,36,.13));
+  border-radius:10px; padding:9px 12px; line-height:1.6 }
+.tpl-sec{ border:1px solid var(--border); border-radius:12px; overflow:hidden }
+.tpl-sec-h{ display:flex; align-items:center; gap:9px; padding:10px 13px; border-bottom:1px solid var(--border); background:var(--surface-2) }
+.tpl-sec-h b{ font-size:12px; font-weight:600 }
+.tpl-sec-h .cnt{ font-size:10.5px; color:var(--muted) }
+.tpl-add{ margin-left:auto; font:inherit; font-size:11px; font-weight:600; color:var(--primary);
+  background:var(--primary-soft); border:none; border-radius:8px; padding:4px 11px; cursor:pointer }
+.tpl-add:hover{ opacity:.85 }
+
+.tpl-groups{ display:flex; flex-direction:column }
+.tpl-g{ display:flex; align-items:center; gap:10px; padding:9px 13px; border-bottom:1px solid var(--border);
+  background:var(--surface); cursor:grab; transition:background .15s }
+.tpl-g:last-child{ border-bottom:none }
+.tpl-g:hover{ background:var(--surface-2) }
+.tpl-g.open{ background:var(--primary-soft); border-bottom-color:transparent; cursor:default }
+.tpl-g.dragging{ opacity:.4 }
+.tpl-g.dragover{ box-shadow:inset 0 2px 0 var(--primary) }
+.tpl-grip{ color:var(--muted); opacity:.4; font-size:12px; letter-spacing:-1px; flex:none }
+.tpl-gimg{ width:28px; height:28px; border-radius:8px; flex:none; display:flex; align-items:center; justify-content:center;
+  background:var(--surface-2); border:1px solid var(--border); font-size:13px; overflow:hidden }
+.tpl-gimg img{ width:22px; height:22px; object-fit:contain }
+.tpl-gn{ flex:1; min-width:0; display:flex; flex-direction:column }
+.tpl-gn b{ font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.tpl-gn i{ font-style:normal; font-size:10px; color:var(--muted) }
+.tpl-gact{ display:flex; gap:4px; flex:none; opacity:.75 }
+.tpl-g:hover .tpl-gact{ opacity:1 }
+
+.tag{ display:inline-flex; align-items:center; font-size:10px; font-weight:600; padding:2px 8px; border-radius:999px;
+  background:var(--surface-2); color:var(--muted); border:1px solid var(--border); white-space:nowrap }
+.tag.p{ color:var(--primary); background:var(--primary-soft); border-color:transparent }
+.tag.g{ color:var(--green); background:var(--green-soft); border-color:transparent }
+.tag.o{ color:var(--orange); background:light-dark(rgba(245,158,11,.12), rgba(251,191,36,.15)); border-color:transparent }
+
+.tpl-form{ display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; padding:12px 13px 14px;
+  background:light-dark(rgba(79,70,229,.045), rgba(129,140,248,.07)); border-bottom:1px solid var(--border) }
+.tpl-form .fl{ display:flex; flex-direction:column; gap:4px; min-width:0 }
+.tpl-form .fl > span{ font-size:10.5px; color:var(--muted) }
+.tpl-form .fl.full{ grid-column:1/-1 }
+.tpl-form .input{ font-size:11.5px; padding:6px 10px; border-radius:8px }
+.tpl-form .input.mono{ font-family:ui-monospace,Consolas,monospace; font-size:10.5px }
+.tpl-inl{ display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--muted) }
+.tpl-form-inline{ border-bottom:none; background:transparent; padding:6px 0 12px;
+  grid-template-columns:130px minmax(0,1fr) 160px 84px; align-items:end }
+.tpl-form-inline .fl.full{ grid-column:auto }
+.tpl-form-row td{ background:light-dark(rgba(79,70,229,.045), rgba(129,140,248,.07)); padding:0 13px }
+
+.tpl-rules tr.tpl-r{ cursor:grab }
+.tpl-rules tr.tpl-r:hover td{ background:var(--surface-2) }
+.tpl-rules tr.tpl-r.dragging{ opacity:.4 }
+.tpl-rules tr.tpl-r.dragover td{ box-shadow:inset 0 2px 0 var(--primary) }
+.tpl-rules td.n{ color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap }
+.tpl-rules td.m{ font-family:ui-monospace,Consolas,monospace; font-size:10.5px; color:var(--primary);
+  max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.tpl-rules td.ops{ text-align:right; white-space:nowrap }
+.tpl-rules td.ops .iconbtn{ margin-left:4px }
+.tpl-rules .tpl-grip{ margin-right:5px }
+
+.tpl-raw{ width:100%; min-height:420px; padding:14px; border:none; border-radius:0 0 12px 12px;
+  background:var(--surface-2); color:var(--fg); font-family:ui-monospace,Consolas,monospace;
+  font-size:11.5px; line-height:1.7; resize:vertical; outline:none; display:block }
+
+@media (max-width:1100px){
+  .tpl-layout{ grid-template-columns:1fr }
+  .tpl-form{ grid-template-columns:1fr }
+  .tpl-form-inline{ grid-template-columns:1fr }
+}
+
+.tpl-rules td.src{ max-width:230px }
+.tpl-rules td.src .mono{ font-size:10px; color:var(--muted); display:inline-block;
+  max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:middle }
+
+.tpl-pv{ margin-top:10px; padding:10px 12px 12px; border-radius:10px;
+  border:1px dashed var(--border); background:var(--surface) }
+.tpl-pv-h{ display:flex; align-items:center; gap:8px; font-size:11px; font-weight:600;
+  color:var(--muted); margin-bottom:8px }
+.tpl-pv-grid{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px 12px }
+.tpl-pv-grid .fl{ display:flex; flex-direction:column; gap:3px; min-width:0 }
+.tpl-pv-grid .fl.full{ grid-column:1/-1 }
+.tpl-pv-grid .fl > span{ font-size:10px; color:var(--muted) }
+.tpl-pv-grid .input{ font-size:11px; padding:5px 9px; border-radius:7px }
+
+.addrule-grid{ display:grid; grid-template-columns:150px 1fr 160px; gap:0 12px }
+.addrule-pv{ margin-top:12px; padding:10px 12px 12px; border-radius:10px;
+  border:1px dashed var(--border); background:var(--surface-2) }
+.addrule-pv .tpl-pv-grid{ grid-template-columns:1fr 1fr 1fr }
+
+.tpl-rules tr.tpl-r:hover td{ cursor:pointer }
+.tpl-g{ cursor:pointer }
+.tpl-g.open{ cursor:default }

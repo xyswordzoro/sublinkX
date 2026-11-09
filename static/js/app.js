@@ -831,61 +831,572 @@ async function openSubDlg(sub) {
     }, { noFocus: false });
 }
 
-/* ================= 模板配置 ================= */
+/* ================= 模板配置（可视化编辑） ================= */
+/* ================= 模板配置（可视化编辑） ================= */
+var TPL_TYPES = [
+  { v: 'select', n: 'Selector（手动选择）' },
+  { v: 'url-test', n: 'URLTest（自动测速）' },
+  { v: 'fallback', n: 'Fallback（故障转移）' },
+  { v: 'load-balance', n: 'LoadBalance（负载均衡）' },
+  { v: 'relay', n: 'Relay（链式代理）' }
+];
+
+function tplState() {
+  if (!state.tpl) {
+    state.tpl = { file: '', parsed: null, groups: [], rules: [], providers: [], openGroup: -1, openRule: -1, tab: 'viz', dirty: false, rawDirty: false };
+  }
+  return state.tpl;
+}
+
 async function renderTemplates() {
   var view = $('#view');
+  var t = tplState();
   view.innerHTML = '<div class="loading">加载中…</div>';
   try {
     var d = await api('/api/v1/template/get');
     state.templates = d.data || [];
   } catch (e) { view.innerHTML = errorBox(e.message); return; }
 
-  var rows = state.templates.map(function (t) {
-    return '<tr><td><b class="mono">' + esc(t.file) + '</b></td><td class="dim">' + esc(t.create_date || '') +
-      '</td><td class="ops"><button class="iconbtn sm" data-act="edit" aria-label="编辑">' + icon('edit', 14) +
-      '</button><button class="iconbtn sm danger" data-act="del" aria-label="删除">' + icon('trash', 14) + '</button></td></tr>';
-  }).join('');
+  if (!state.templates.length) {
+    view.innerHTML =
+      '<div class="page-bar"><span class="page-count">模板目录 ./template</span>' +
+      '<button id="btn-add-tpl" class="btn btn-primary" type="button">' + icon('plus', 15) + '新建模板</button></div>' +
+      '<section class="tile"><p class="empty">暂无模板文件 · 点击右上角「新建模板」创建</p></section>';
+    $('#btn-add-tpl').addEventListener('click', function () { openTplDlg(null); });
+    return;
+  }
 
+  var cur = state.templates.some(function (x) { return x.file === t.file; }) ? t.file : state.templates[0].file;
   view.innerHTML =
-    '<div class="page-bar"><span class="page-count">模板目录 ./template · Clash / Surge 模板可在线编辑</span>' +
-    '<button id="btn-add-tpl" class="btn btn-primary" type="button">' + icon('plus', 15) + '新建模板</button></div>' +
-    '<section class="tile"><table class="table"><thead><tr><th>文件名</th><th>修改时间</th><th class="ops">操作</th></tr></thead>' +
-    '<tbody id="tpl-rows">' + rows + '</tbody></table>' +
-    (rows ? '' : '<p class="empty">暂无模板文件</p>') + '</section>';
+    '<div class="page-bar"><span class="page-count">模板目录 ./template · 可视化编辑策略组与规则</span>' +
+    '<button id="btn-add-tpl" class="btn" type="button">' + icon('plus', 15) + '新建模板</button></div>' +
+    '<div class="tpl-layout">' +
+    '<aside class="tile tpl-side"><div class="tpl-side-h">模板文件<span>' + state.templates.length + '</span></div>' +
+    '<div id="tpl-files">' + state.templates.map(function (x) {
+      return '<div class="tpl-file' + (x.file === cur ? ' on' : '') + '" data-file="' + esc(x.file) + '">' +
+        '<span class="tpl-ico">' + esc((x.file.split('.')[1] || 't')[0].toUpperCase()) + '</span>' +
+        '<span class="tpl-fname">' + esc(x.file) + '</span>' +
+        '<button class="tpl-del" data-act="del" aria-label="删除">' + icon('trash', 12) + '</button></div>';
+    }).join('') + '</div></aside>' +
+    '<div class="tpl-main" id="tpl-main"></div>' +
+    '</div>';
 
   $('#btn-add-tpl').addEventListener('click', function () { openTplDlg(null); });
-  $('#tpl-rows').addEventListener('click', function (e) {
-    var btn = e.target.closest('button[data-act]');
-    if (!btn) return;
-    var tr = btn.closest('tr');
-    var file = tr.querySelector('b').textContent;
-    var tpl = state.templates.find(function (t) { return t.file === file; });
-    if (!tpl) return;
-    if (btn.dataset.act === 'edit') openTplDlg(tpl);
-    else confirmDlg('确定删除模板「' + tpl.file + '」吗？', '删除', async function () {
-      await api('/api/v1/template/delete', { method: 'POST', form: { filename: tpl.file } });
-      toast('删除成功', true);
-      renderTemplates();
-    });
+  $('#tpl-files').addEventListener('click', function (e) {
+    var del = e.target.closest('button[data-act="del"]');
+    if (del) {
+      var f = del.closest('.tpl-file').dataset.file;
+      confirmDlg('确定删除模板「' + f + '」吗？', '删除', async function () {
+        await api('/api/v1/template/delete', { method: 'POST', form: { filename: f } });
+        toast('删除成功', true);
+        state.tpl = null;
+        renderTemplates();
+      });
+      return;
+    }
+    var row = e.target.closest('.tpl-file');
+    if (!row) return;
+    document.querySelectorAll('.tpl-file').forEach(function (x) { x.classList.remove('on'); });
+    row.classList.add('on');
+    loadTplStruct(row.dataset.file);
   });
+  $('#tpl-main').addEventListener('click', tplMainClick);
+  $('#tpl-main').addEventListener('change', tplMainChange);
+  $('#tpl-main').addEventListener('input', tplMainChange);
 
-  if (state.pendingDialog === 'add-tpl') { state.pendingDialog = null; openTplDlg(null); }
+  loadTplStruct(cur);
 }
 
-function openTplDlg(tpl) {
+async function loadTplStruct(file) {
+  var t = tplState();
+  t.file = file;
+  t.openGroup = -1;
+  t.openRule = -1;
+  t.dirty = false;
+  t.rawDirty = false;
+  var main = $('#tpl-main');
+  if (main) main.innerHTML = '<section class="tile"><p class="empty">解析中…</p></section>';
+  try {
+    var d = await api('/api/v1/template/parse?file=' + encodeURIComponent(file));
+    t.parsed = d.data;
+    t.groups = (d.data.groups || []).map(function (g) { return JSON.parse(JSON.stringify(g)); });
+    t.rules = (d.data.rules || []).slice();
+    t.providers = (d.data.providers || []).map(function (x) { return JSON.parse(JSON.stringify(x)); });
+    if (t.tab === 'viz' && !d.data.hasProxyGroups) t.tab = 'raw';
+    renderTplEditor();
+  } catch (e) {
+    if (main) main.innerHTML = errorBox(e.message);
+  }
+}
+
+function tplGroupIcon(g) {
+  if (g.icon) {
+    return '<img src="' + esc(g.icon) + '" alt="" onerror="this.parentNode.textContent=\'◇\'"/>';
+  }
+  var map = { select: '◇', 'url-test': '⚡', fallback: '⇄', 'load-balance': '⚖', relay: '⛓' };
+  return map[g.type] || '◇';
+}
+
+function tplTags(g) {
+  var out = '';
+  if (g.includeAll) out += '<span class="tag g">include-all</span>';
+  if (g.filter && /SublinkX/.test(g.filter)) out += '<span class="tag o">已锁定</span>';
+  else if (g.filter) out += '<span class="tag">filter</span>';
+  if (!g.includeAll && !g.filter && (g.proxies || []).length) out += '<span class="tag p">节点注入</span>';
+  return out;
+}
+
+function renderTplEditor() {
+  var t = tplState();
+  var p = t.parsed || {};
+  var main = $('#tpl-main');
+  if (!main) return;
+  var issues = (p.issues || []).slice();
+  // 前端实时补充校验
+  var names = {};
+  t.groups.forEach(function (g) {
+    if (!g.name) issues.push('存在未命名的策略组');
+    else if (names[g.name]) issues.push('策略组重名：' + g.name);
+    else names[g.name] = true;
+  });
+  var exist = Object.assign({ DIRECT: 1, REJECT: 1 }, names);
+  t.rules.forEach(function (r, i) {
+    var parts = String(r).split(',');
+    var target = parts[parts.length - 1];
+    if (target === 'no-resolve') target = parts[parts.length - 2];
+    if (parts[0] && parts[0].toUpperCase() === 'MATCH') {
+      if (!exist[target]) issues.push('第 ' + (i + 1) + ' 条 MATCH 目标不存在：' + target);
+    } else if (target && !exist[target] && target !== 'no-resolve') {
+      issues.push('第 ' + (i + 1) + ' 条规则目标组不存在：' + target);
+    }
+  });
+  var chip = issues.length
+    ? '<span class="tpl-chip bad">⚠ ' + issues.length + ' 个问题</span>'
+    : '<span class="tpl-chip ok">✓ 校验通过</span>';
+
+  main.innerHTML =
+    '<section class="tile tpl-editor">' +
+    '<header class="tpl-head">' +
+    '<div class="tpl-title"><b>' + esc(t.file) + '</b>' +
+    '<span class="tpl-meta">' + t.groups.length + ' 组 · ' + t.rules.length + ' 规则</span></div>' +
+    '<div class="tpl-tabs">' +
+    '<button class="' + (t.tab === 'viz' ? 'on' : '') + '" data-tab="viz" type="button">可视化编辑</button>' +
+    '<button class="' + (t.tab === 'raw' ? 'on' : '') + '" data-tab="raw" type="button">原始 YAML</button>' +
+    '</div>' + chip +
+    '<button class="btn btn-primary" id="btn-tpl-save" type="button">' + icon('check', 15) + '保存模板</button>' +
+    '</header>' +
+    (t.tab === 'viz' ? tplVizHtml(issues) : tplRawHtml()) +
+    '</section>';
+
+  if (t.tab === 'raw') {
+    var ta = $('#tpl-raw-editor');
+    if (ta) ta.addEventListener('input', function () { t.rawDirty = true; });
+  } else {
+    bindTplDrag();
+  }
+}
+
+function tplVizHtml(issues) {
+  var t = tplState();
+  var groupRows = t.groups.map(function (g, i) {
+    var open = t.openGroup === i;
+    return '<div class="tpl-g' + (open ? ' open' : '') + '" draggable="true" data-gi="' + i + '">' +
+      '<span class="tpl-grip">⠿</span>' +
+      '<span class="tpl-gimg">' + tplGroupIcon(g) + '</span>' +
+      '<span class="tpl-gn"><b>' + esc(g.name || '(未命名)') + '</b>' +
+      '<i>' + esc(g.type || 'select') + (g.includeAll ? ' · 自动包含全部节点' : ' · ' + (g.proxies || []).length + ' 个候选') + '</i></span>' +
+      tplTags(g) +
+      '<span class="tpl-gact">' +
+      '<button class="iconbtn sm" data-act="edit-group" data-gi="' + i + '" aria-label="编辑">' + icon('edit', 13) + '</button>' +
+      '<button class="iconbtn sm danger" data-act="del-group" data-gi="' + i + '" aria-label="删除">' + icon('trash', 13) + '</button>' +
+      '</span></div>' +
+      (open ? tplGroupForm(g, i) : '');
+  }).join('');
+
+  var pvMap = {};
+  (t.providers || []).forEach(function (x) { pvMap[x.name] = x; });
+  var ruleRows = t.rules.map(function (r, i) {
+    var parts = String(r).split(',');
+    var kind = parts[0] || '';
+    var tail = parts.slice(1);
+    var extra = '';
+    if (tail.length >= 2 && String(tail[tail.length - 1]).trim() === 'no-resolve') {
+      extra = 'no-resolve';
+      tail = tail.slice(0, tail.length - 1);
+    }
+    var target = tail.length ? tail[tail.length - 1] : '';
+    var body = tail.slice(0, tail.length - 1).join(',');
+    var open = t.openRule === i;
+    var pv = pvMap[body];
+    var src = (pv && pv.url) ? pv.url : '';
+    return '<tr class="tpl-r' + (open ? ' open' : '') + '" draggable="true" data-ri="' + i + '">' +
+      '<td class="n"><span class="tpl-grip">⠿</span>' + (i + 1) + '</td>' +
+      '<td><span class="tag">' + esc(kind) + '</span></td>' +
+      '<td class="m">' + esc(body || '—') +
+      (extra ? ' <span class="tag o">no-resolve</span>' : '') + '</td>' +
+      '<td class="src">' + (src
+        ? '<span class="mono" title="' + esc(src) + '">' + esc(src) + '</span>'
+        : '<span class="dim">—</span>') + '</td>' +
+      '<td><span class="tag p">' + esc(target || '—') + '</span></td>' +
+      '<td class="ops"><button class="iconbtn sm" data-act="edit-rule" data-ri="' + i + '" aria-label="编辑">' + icon('edit', 13) + '</button>' +
+      '<button class="iconbtn sm danger" data-act="del-rule" data-ri="' + i + '" aria-label="删除">' + icon('trash', 13) + '</button></td></tr>' +
+      (open ? tplRuleForm(r, i) : '');
+  }).join('');
+
+  return '<div class="tpl-body">' +
+    (issues.length ? '<div class="tpl-warn">⚠ ' + issues.map(esc).join('；') + '</div>' : '') +
+    '<div class="tpl-sec"><div class="tpl-sec-h"><b>策略组</b><span class="cnt">' + t.groups.length + ' 个</span>' +
+    '<button class="tpl-add" data-act="add-group" type="button">+ 新建组</button></div>' +
+    '<div class="tpl-groups">' + (groupRows || '<p class="empty">暂无策略组</p>') + '</div></div>' +
+
+    '<div class="tpl-sec"><div class="tpl-sec-h"><b>规则</b><span class="cnt">按顺序匹配 · 拖拽调整优先级</span>' +
+    '<button class="tpl-add" data-act="add-rule" type="button">+ 添加规则</button></div>' +
+    '<table class="table tpl-rules"><thead><tr><th style="width:52px">#</th><th style="width:112px">类型</th><th style="width:190px">内容</th>' +
+    '<th>来源</th><th style="width:132px">目标策略组</th><th style="text-align:right;width:104px">操作</th></tr></thead>' +
+    '<tbody>' + (ruleRows || '<tr><td colspan="6"><p class="empty">暂无规则</p></td></tr>') + '</tbody></table></div>' +
+    '</div>';
+}
+
+function tplGroupForm(g, i) {
+  var opts = TPL_TYPES.map(function (x) {
+    return '<option value="' + x.v + '"' + (g.type === x.v ? ' selected' : '') + '>' + x.n + '</option>';
+  }).join('');
+  return '<div class="tpl-form">' +
+    '<label class="fl"><span>组名称</span><input class="input" data-gf="name" data-gi="' + i + '" value="' + esc(g.name) + '"/></label>' +
+    '<label class="fl"><span>类型</span><select class="input" data-gf="type" data-gi="' + i + '">' + opts + '</select></label>' +
+    '<label class="fl full"><span>候选（逗号分隔，可填组名 / DIRECT / REJECT）</span>' +
+    '<input class="input mono" data-gf="proxies" data-gi="' + i + '" value="' + esc((g.proxies || []).join(', ')) + '"/></label>' +
+    '<label class="fl"><span>图标 URL</span><input class="input mono" data-gf="icon" data-gi="' + i + '" value="' + esc(g.icon || '') + '"/></label>' +
+    '<label class="fl"><span>自动包含全部节点</span><span class="tpl-inl">' +
+    '<input type="checkbox" data-gf="includeAll" data-gi="' + i + '"' + (g.includeAll ? ' checked' : '') + '/>启用 include-all</span></label>' +
+    '<label class="fl"><span>筛选正则 filter</span><input class="input mono" data-gf="filter" data-gi="' + i + '" value="' + esc(g.filter || '') + '"/></label>' +
+    '<label class="fl"><span>排除正则 exclude-filter</span><input class="input mono" data-gf="excludeFilter" data-gi="' + i + '" value="' + esc(g.excludeFilter || '') + '"/></label>' +
+    '<label class="fl"><span>测速地址 URL</span><input class="input mono" data-gf="url" data-gi="' + i + '" value="' + esc(g.url || '') + '"/></label>' +
+    '<label class="fl"><span>间隔（秒）</span><input class="input" type="number" data-gf="interval" data-gi="' + i + '" value="' + (g.interval || '') + '"/></label>' +
+    '<label class="fl"><span>容差 tolerance</span><input class="input" type="number" data-gf="tolerance" data-gi="' + i + '" value="' + (g.tolerance || '') + '"/></label>' +
+    '</div>';
+}
+
+function tplRuleForm(r, i) {
+  var parts = String(r).split(',');
+  var kind = parts[0] || '';
+  var tail = parts.slice(1);
+  var extra = '';
+  if (tail.length >= 2 && String(tail[tail.length - 1]).trim() === 'no-resolve') {
+    extra = 'no-resolve';
+    tail = tail.slice(0, tail.length - 1);
+  }
+  var target = tail.length ? tail[tail.length - 1] : '';
+  var body = tail.slice(0, tail.length - 1).join(',');
+  var names = ['DIRECT', 'REJECT'];
+  tplState().groups.forEach(function (g) { if (g.name) names.push(g.name); });
+  var sel = '<select class="input" id="tpl-rule-target-' + i + '">' + names.map(function (n) {
+    return '<option' + (n === target ? ' selected' : '') + '>' + esc(n) + '</option>';
+  }).join('') + (names.indexOf(target) < 0 ? '<option selected>' + esc(target) + '</option>' : '') + '</select>';
+  var pv = null;
+  (tplState().providers || []).forEach(function (x) { if (x.name === body) pv = x; });
+  var pvHtml = tplProviderFields(i, body, pv);
+  return '<tr class="tpl-form-row"><td colspan="6"><div class="tpl-form tpl-form-inline">' +
+    '<label class="fl"><span>规则类型</span><input class="input mono" id="tpl-rule-kind-' + i + '" value="' + esc(kind) + '"/></label>' +
+    '<label class="fl"><span>内容（RULE-SET 名 / 域名 / IP 等）</span><input class="input mono" id="tpl-rule-body-' + i + '" value="' + esc(body) + '"/></label>' +
+    '<label class="fl"><span>目标策略组</span>' + sel + '</label>' +
+    '<input type="hidden" id="tpl-rule-extra-' + i + '" value="' + esc(extra) + '"/>' +
+    '<label class="fl"><span>&nbsp;</span><button class="btn btn-primary" data-act="save-rule" data-ri="' + i + '" type="button">应用</button></label>' +
+    '</div>' + pvHtml + '</td></tr>';
+}
+
+function bindTplDrag() {
+  var t = tplState();
+  var dragKind = null, dragIndex = -1;
+
+  function makeDraggable(row, kind, index) {
+    row.addEventListener('dragstart', function (e) {
+      dragKind = kind;
+      dragIndex = index;
+      row.classList.add('dragging');
+      try { e.dataTransfer.setData('text/plain', kind + ':' + index); e.dataTransfer.effectAllowed = 'move'; } catch (err) {}
+    });
+    row.addEventListener('dragend', function () { row.classList.remove('dragging'); });
+    row.addEventListener('dragover', function (e) {
+      if (dragKind !== kind) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      row.classList.add('dragover');
+    });
+    row.addEventListener('dragleave', function () { row.classList.remove('dragover'); });
+    row.addEventListener('drop', function (e) {
+      e.preventDefault();
+      row.classList.remove('dragover');
+      if (dragKind !== kind || dragIndex === index) return;
+      var arr = kind === 'g' ? t.groups : t.rules;
+      var moved = arr.splice(dragIndex, 1)[0];
+      arr.splice(index, 0, moved);
+      t.openGroup = -1;
+      t.openRule = -1;
+      renderTplEditor();
+      toast('顺序已更新', true);
+    });
+  }
+
+  document.querySelectorAll('.tpl-groups .tpl-g').forEach(function (row) {
+    var idx = +row.dataset.gi;
+    if (!isNaN(idx)) makeDraggable(row, 'g', idx);
+  });
+  document.querySelectorAll('.tpl-rules tbody tr.tpl-r').forEach(function (row) {
+    var idx = +row.dataset.ri;
+    if (!isNaN(idx)) makeDraggable(row, 'r', idx);
+  });
+}
+
+function tplProviderFields(idx, name, pv) {
+  var type = pv ? pv.type : 'http';
+  var behavior = pv ? pv.behavior : 'domain';
+  var format = pv ? pv.format : 'mrs';
+  var interval = pv ? (pv.interval || 86400) : 86400;
+  var url = pv ? (pv.url || '') : '';
+  var behOpts = ['domain', 'ipcidr', 'classical'].map(function (b) {
+    return '<option' + (b === behavior ? ' selected' : '') + '>' + b + '</option>';
+  }).join('');
+  var fmtOpts = ['mrs', 'text', 'yaml'].map(function (f) {
+    return '<option' + (f === format ? ' selected' : '') + '>' + f + '</option>';
+  }).join('');
+  return '<div class="tpl-pv">' +
+    '<div class="tpl-pv-h">' + (pv ? '规则集定义（rule-providers.' + esc(name) + '）' : '规则集定义（将新建 rule-providers.' + esc(name) + '）') +
+    '<span class="tag ' + (pv ? 'g' : 'o') + '">' + (pv ? '已存在' : '新建') + '</span></div>' +
+    '<div class="tpl-pv-grid">' +
+    '<label class="fl full"><span>来源 URL</span><input class="input mono" id="tpl-pv-url-' + idx + '" value="' + esc(url) + '" placeholder="https://…/AI.list"/></label>' +
+    '<label class="fl"><span>behavior</span><select class="input" id="tpl-pv-behavior-' + idx + '">' + behOpts + '</select></label>' +
+    '<label class="fl"><span>format</span><select class="input" id="tpl-pv-format-' + idx + '">' + fmtOpts + '</select></label>' +
+    '<label class="fl"><span>刷新间隔（秒）</span><input class="input" type="number" id="tpl-pv-interval-' + idx + '" value="' + interval + '"/></label>' +
+    '<label class="fl"><span>type</span><input class="input mono" id="tpl-pv-type-' + idx + '" value="' + esc(type) + '"/></label>' +
+    '</div></div>';
+}
+
+function tplRawHtml() {
+  var t = tplState();
+  var raw = (t.parsed && t.parsed.raw) || '';
+  return '<div class="tpl-body"><div class="tpl-sec"><div class="tpl-sec-h"><b>原始 YAML</b>' +
+    '<span class="cnt">直接编辑全文，保存后可视化视图同步</span></div>' +
+    '<textarea id="tpl-raw-editor" class="tpl-raw" spellcheck="false">' + esc(raw) + '</textarea></div></div>';
+}
+
+function tplMainClick(e) {
+  var t = tplState();
+  // 整行点击展开/收起规则（按钮与表单区域除外）
+  var ruleRow = e.target.closest('tr.tpl-r');
+  if (ruleRow && !e.target.closest('button') && !e.target.closest('.tpl-form-row')) {
+    var ridx = +ruleRow.dataset.ri;
+    t.openRule = (t.openRule === ridx) ? -1 : ridx;
+    t.openGroup = -1;
+    renderTplEditor();
+    return;
+  }
+  // 策略组整行同样可点
+  var gRow = e.target.closest('.tpl-g');
+  if (gRow && !e.target.closest('button') && !e.target.closest('input') && !e.target.closest('.tpl-form')) {
+    var gidx = +gRow.dataset.gi;
+    t.openGroup = (t.openGroup === gidx) ? -1 : gidx;
+    t.openRule = -1;
+    renderTplEditor();
+    return;
+  }
+  var tabBtn = e.target.closest('button[data-tab]');
+  if (tabBtn) {
+    t.tab = tabBtn.dataset.tab;
+    renderTplEditor();
+    return;
+  }
+  if (e.target.closest('#btn-tpl-save')) { saveTplStruct(); return; }
+
+  var btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  var act = btn.dataset.act;
+
+  if (act === 'edit-group') {
+    var gi = +btn.dataset.gi;
+    t.openGroup = (t.openGroup === gi) ? -1 : gi;
+    renderTplEditor();
+  } else if (act === 'del-group') {
+    var dg = +btn.dataset.gi;
+    t.groups.splice(dg, 1);
+    t.openGroup = -1;
+    renderTplEditor();
+    toast('已删除策略组', true);
+  } else if (act === 'add-group') {
+    t.groups.push({ name: '新策略组', type: 'select', proxies: ['DIRECT'], icon: '', filter: '', excludeFilter: '', includeAll: false, url: '', interval: 0, tolerance: 0, extra: {} });
+    t.openGroup = t.groups.length - 1;
+    renderTplEditor();
+  } else if (act === 'edit-rule') {
+    var ri = +btn.dataset.ri;
+    t.openRule = (t.openRule === ri) ? -1 : ri;
+    renderTplEditor();
+  } else if (act === 'del-rule') {
+    t.rules.splice(+btn.dataset.ri, 1);
+    t.openRule = -1;
+    renderTplEditor();
+  } else if (act === 'add-rule') {
+    openAddRuleDlg();
+  } else if (act === 'save-rule') {
+    var idx = +btn.dataset.ri;
+    var kind = $('#tpl-rule-kind-' + idx).value.trim();
+    var body = $('#tpl-rule-body-' + idx).value.trim();
+    var target = $('#tpl-rule-target-' + idx).value;
+    if (!kind) { toast('规则类型不能为空', false); return; }
+    var extraEl = document.getElementById('tpl-rule-extra-' + idx);
+    var extra = extraEl ? extraEl.value : '';
+    var rule = kind.toUpperCase() === 'MATCH'
+      ? ('MATCH,' + target)
+      : (kind + ',' + body + ',' + target + (extra ? ',' + extra : ''));
+    t.rules[idx] = rule;
+    // 同步规则集定义
+    if (String(kind).toUpperCase().indexOf('RULE-SET') >= 0) {
+      var pvUrl = $('#tpl-pv-url-' + idx) ? $('#tpl-pv-url-' + idx).value.trim() : '';
+      if (pvUrl) {
+        t.providers = t.providers || [];
+        var pvObj = {
+          name: body,
+          type: $('#tpl-pv-type-' + idx).value.trim() || 'http',
+          behavior: $('#tpl-pv-behavior-' + idx).value,
+          format: $('#tpl-pv-format-' + idx).value,
+          interval: parseInt($('#tpl-pv-interval-' + idx).value, 10) || 86400,
+          url: pvUrl,
+          path: '',
+          extra: {}
+        };
+        var hit = -1;
+        t.providers.forEach(function (x, k) { if (x.name === body) hit = k; });
+        if (hit >= 0) t.providers[hit] = Object.assign(t.providers[hit], pvObj);
+        else t.providers.push(pvObj);
+      }
+    }
+    t.openRule = -1;
+    renderTplEditor();
+    toast('规则已更新', true);
+  }
+}
+
+function tplMainChange(e) {
+  var t = tplState();
+  var f = e.target.closest('[data-gf]');
+  if (!f) return;
+  var gi = +f.dataset.gi;
+  var key = f.dataset.gf;
+  var g = t.groups[gi];
+  if (!g) return;
+  if (key === 'includeAll') g.includeAll = f.checked;
+  else if (key === 'interval' || key === 'tolerance') g[key] = parseInt(f.value, 10) || 0;
+  else if (key === 'proxies') g.proxies = f.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  else g[key] = f.value;
+  t.dirty = true;
+  // 名称/开关变化需要刷新卡片头部，但不要打断输入焦点
+  if (key === 'type' || key === 'includeAll') {
+    var saved = document.activeElement;
+    renderTplEditor();
+    if (saved) { var again = document.querySelector('[data-gf="' + key + '"][data-gi="' + gi + '"]'); if (again) again.focus(); }
+  }
+}
+
+function openAddRuleDlg() {
+  var t = tplState();
+  var names = ['DIRECT', 'REJECT'];
+  t.groups.forEach(function (g) { if (g.name) names.push(g.name); });
+  var kindOpts = ['RULE-SET', 'DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'IP-CIDR', 'GEOIP', 'GEOSITE', 'MATCH']
+    .map(function (k) { return '<option>' + k + '</option>'; }).join('');
+  var targetOpts = names.map(function (n) { return '<option>' + esc(n) + '</option>'; }).join('');
+  dlgOpen('添加规则',
+    '<div class="addrule-grid">' +
+    '<label class="field"><span>规则类型</span><select id="ar-kind" class="input" style="width:100%">' + kindOpts + '</select></label>' +
+    '<label class="field"><span>内容（RULE-SET 名 / 域名 / IP）</span><input id="ar-body" class="input mono" placeholder="如 AI / telegram_domain"/></label>' +
+    '<label class="field"><span>目标策略组</span><select id="ar-target" class="input" style="width:100%">' + targetOpts + '</select></label>' +
+    '</div>' +
+    '<div class="addrule-pv">' +
+    '<div class="tpl-pv-h">规则集定义（选择 RULE-SET 时生效）<span class="tag o">可选</span></div>' +
+    '<div class="tpl-pv-grid">' +
+    '<label class="fl full"><span>来源 URL</span><input id="ar-pv-url" class="input mono" placeholder="https://…/AI.list 留空则仅引用已有规则集"/></label>' +
+    '<label class="fl"><span>behavior</span><select id="ar-pv-behavior" class="input">' +
+    '<option>domain</option><option>ipcidr</option><option>classical</option></select></label>' +
+    '<label class="fl"><span>format</span><select id="ar-pv-format" class="input">' +
+    '<option>mrs</option><option>text</option><option>yaml</option></select></label>' +
+    '<label class="fl"><span>刷新间隔（秒）</span><input id="ar-pv-interval" class="input" type="number" value="86400"/></label>' +
+    '</div></div>' +
+    '<p class="pick-hint">规则会追加到列表末尾（MATCH 类规则建议保持最后）。</p>',
+    '添加', async function () {
+      var kind = $('#ar-kind').value.trim().toUpperCase();
+      var body = $('#ar-body').value.trim();
+      var target = $('#ar-target').value;
+      if (kind !== 'MATCH' && !body) throw new Error('内容不能为空');
+      var rule = kind === 'MATCH' ? ('MATCH,' + target) : (kind + ',' + body + ',' + target);
+      t.rules.push(rule);
+      if (kind === 'RULE-SET') {
+        var pvUrl = $('#ar-pv-url').value.trim();
+        if (pvUrl) {
+          t.providers = t.providers || [];
+          var pvObj = {
+            name: body, type: 'http',
+            behavior: $('#ar-pv-behavior').value,
+            format: $('#ar-pv-format').value,
+            interval: parseInt($('#ar-pv-interval').value, 10) || 86400,
+            url: pvUrl, path: '', extra: {}
+          };
+          var hit = -1;
+          t.providers.forEach(function (x, k) { if (x.name === body) hit = k; });
+          if (hit >= 0) t.providers[hit] = Object.assign(t.providers[hit], pvObj);
+          else t.providers.push(pvObj);
+        }
+      }
+      renderTplEditor();
+      toast('规则已添加，记得点击「保存模板」', true);
+    }, { noFocus: false });
+  var bodyInp = document.getElementById('ar-body');
+  if (bodyInp) bodyInp.focus();
+}
+
+async function saveTplStruct() {
+  var t = tplState();
+  if (t.tab === 'raw') {
+    var ta = $('#tpl-raw-editor');
+    var text = ta ? ta.value : '';
+    if (!text.trim()) { toast('内容不能为空', false); return; }
+    try {
+      await api('/api/v1/template/update', { method: 'POST', form: { filename: t.file, oldname: t.file, text: text } });
+      toast('保存成功', true);
+      await loadTplStruct(t.file);
+    } catch (e) { toast('保存失败：' + e.message, false); }
+    return;
+  }
+  try {
+    await api('/api/v1/template/save', {
+      method: 'POST',
+      form: {
+        file: t.file,
+        groups: JSON.stringify(t.groups),
+        rules: JSON.stringify(t.rules),
+        providers: JSON.stringify(t.providers || [])
+      }
+    });
+    toast('保存成功', true);
+    await loadTplStruct(t.file);
+  } catch (e) {
+    toast('保存失败：' + e.message, false);
+  }
+}
+
+async function openTplDlg(tpl) {
   var isEdit = !!tpl;
   dlgOpen(isEdit ? '编辑模板' : '新建模板',
     '<label class="field"><span>文件名 *</span><input id="f-filename" class="input" value="' + esc(isEdit ? tpl.file : '') + '" placeholder="如 clash.yaml"/></label>' +
-    '<label class="field"><span>内容 *</span><textarea id="f-text" class="input" rows="16" placeholder="模板内容（YAML / CONF）">' + esc(isEdit ? tpl.text : '') + '</textarea></label>',
-    '保存', async function () {
-      var filename = $('#f-filename').value.trim(), text = $('#f-text').value;
+    (isEdit ? '' : '<label class="field"><span>内容 *</span><textarea id="f-text" class="input" rows="14" placeholder="模板内容（YAML / CONF）"></textarea></label>'),
+    isEdit ? '保存' : '创建', async function () {
+      var filename = $('#f-filename').value.trim();
       if (!filename || filename.indexOf('/') >= 0 || filename.indexOf('\\') >= 0) throw new Error('文件名不能为空且不能包含路径分隔符');
-      if (!text.trim()) throw new Error('内容不能为空');
       if (isEdit) {
-        await api('/api/v1/template/update', { method: 'POST', form: { filename: filename, oldname: tpl.file, text: text } });
+        var text = '';
+        await api('/api/v1/template/update', { method: 'POST', form: { filename: filename, oldname: tpl.file, text: $('#f-text') ? $('#f-text').value : tpl.text } });
         toast('保存成功', true);
       } else {
-        await api('/api/v1/template/add', { method: 'POST', form: { filename: filename, text: text } });
+        var t = $('#f-text').value;
+        if (!t.trim()) throw new Error('内容不能为空');
+        await api('/api/v1/template/add', { method: 'POST', form: { filename: filename, text: t } });
         toast('创建成功', true);
       }
       renderTemplates();

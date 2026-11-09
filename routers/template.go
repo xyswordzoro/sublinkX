@@ -13,6 +13,8 @@ func Templates(r *gin.Engine) {
 		TempsGroup.POST("/delete", api.DelTemp)
 		TempsGroup.GET("/get", api.GetTempS)
 		TempsGroup.POST("/update", api.UpdateTemp)
+		TempsGroup.GET("/parse", api.TplParse)          // 解析为可视化结构
+		TempsGroup.POST("/save", api.TplSaveStruct)     // 结构化回写
 	}
 
 }
