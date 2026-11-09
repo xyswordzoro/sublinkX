@@ -48,12 +48,36 @@ func Start(token string) {
 	}
 	// 重建 HTTP 客户端以应用代理配置
 	httpClient = buildClient()
+	// 注册命令菜单（Telegram 输入框上方/斜杠提示）
+	registerCommands(token)
 	stopMutex.Lock()
 	stopCh = make(chan struct{})
 	ch := stopCh
 	stopMutex.Unlock()
 	go pollLoop(token, ch)
 	log.Println("[telegram] bot 已启动")
+}
+
+// botCommands 命令菜单（Telegram 中 "/" 提示列表）
+var botCommands = []map[string]string{
+	{"command": "add", "description": "添加节点（同名自动替换）"},
+	{"command": "list", "description": "节点列表"},
+	{"command": "test", "description": "测试节点连通性"},
+	{"command": "del", "description": "删除节点"},
+	{"command": "sub", "description": "获取订阅链接"},
+	{"command": "help", "description": "使用帮助"},
+}
+
+// registerCommands 向 Telegram 注册命令菜单，失败不影响轮询
+func registerCommands(token string) {
+	_, err := callAPI(token, "setMyCommands", map[string]interface{}{
+		"commands": botCommands,
+	})
+	if err != nil {
+		log.Println("[telegram] 注册命令菜单失败:", err)
+		return
+	}
+	log.Println("[telegram] 命令菜单已注册:", len(botCommands), "条")
 }
 
 // Stop 停止当前轮询
@@ -101,12 +125,12 @@ func callAPI(token, method string, params interface{}) (interface{}, error) {
 	}
 	req, err := http.NewRequest("POST", apiBase+token+"/"+method, strings.NewReader(string(body)))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s 请求构造失败: %s", method, maskTokenInErr(err.Error(), token))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s 请求失败: %s", method, maskTokenInErr(err.Error(), token))
 	}
 	defer resp.Body.Close()
 	var tr tgResponse
@@ -117,6 +141,14 @@ func callAPI(token, method string, params interface{}) (interface{}, error) {
 		return nil, fmt.Errorf("telegram api %s: %s", method, tr.Description)
 	}
 	return tr.Result, nil
+}
+
+// maskTokenInErr 从错误信息中抹掉 bot token，避免日志泄露
+func maskTokenInErr(msg, token string) string {
+	if token != "" {
+		msg = strings.ReplaceAll(msg, token, "<bot-token>")
+	}
+	return msg
 }
 
 func sendMessage(token string, chatID int64, text string, keyboard interface{}) {
