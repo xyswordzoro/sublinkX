@@ -14,8 +14,11 @@ type OpLog struct {
 	Detail string
 }
 
-// OpLogAdd 记录一条操作日志
+// OpLogAdd 记录一条操作日志（数据库未初始化时静默跳过）
 func OpLogAdd(source, action, detail string) {
+	if DB == nil {
+		return
+	}
 	l := OpLog{
 		Time:   time.Now().Format("2006-01-02 15:04:05"),
 		Source: source,

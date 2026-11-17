@@ -1,155 +1,28 @@
 package api
 
 import (
-	"errors"
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"sublink/models"
+	"sublink/tpl"
 
 	"github.com/gin-gonic/gin"
 )
 
-type Temp struct {
-	File       string `json:"file"`
-	Text       string `json:"text"`
-	CreateDate string `json:"create_date"`
-}
+type Temp = tpl.Temp
 
 // 定义允许操作的基础目录
 
-var baseTemplateDir string
-
-func init() {
-	// === 修改点开始 ===
-	// 获取当前工作目录 (Current Working Directory)
-	// 当您在项目根目录运行 `go run main.go` 时，这将是项目根目录
-	cwd, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("无法获取当前工作目录: %v", err)
-	}
-
-	// 将 "template" 路径解析为相对于当前工作目录的绝对路径
-	absPath, err := filepath.Abs(filepath.Join(cwd, "template"))
-	if err != nil {
-		log.Fatalf("无法解析 template 目录的绝对路径: %v", err)
-	}
-	baseTemplateDir = absPath
-	log.Printf("基础模板目录已初始化为: %s (基于当前工作目录)", baseTemplateDir)
-	// === 修改点结束 ===
-
-	// 确保基础模板目录存在，如果不存在则创建
-	if _, err := os.Stat(baseTemplateDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(baseTemplateDir, 0755); err != nil {
-			log.Fatalf("无法创建基础模板目录 %s: %v", baseTemplateDir, err)
-		}
-		log.Printf("已创建基础模板目录: %s", baseTemplateDir)
-	}
-}
-
-// safeFilename 生成安全的文件路径，防止目录遍历
+// safeFilePath 转发到 tpl 包的安全路径校验（模板引擎已迁移至 sublink/tpl）
 func safeFilePath(filename string) (string, error) {
-	// 1. 清理用户提供的文件名，移除冗余的 "." 和 ".." 等。
-	cleanFilename := filepath.Clean(filename)
-
-	// 2. 严格检查文件名是否包含任何路径分隔符。
-	// 这强制只允许在 baseTemplateDir 下直接操作文件，不能通过文件名创建子目录。
-	if strings.ContainsRune(cleanFilename, os.PathSeparator) ||
-		strings.ContainsRune(cleanFilename, '/') ||
-		strings.ContainsRune(cleanFilename, '\\') {
-		return "", errors.New("文件名不能包含路径分隔符")
-	}
-
-	// 3. 禁止使用特殊文件名（如 ".", "..", 或空字符串）。
-	if cleanFilename == "." || cleanFilename == ".." || cleanFilename == "" {
-		return "", errors.New("文件名无效或指向目录本身")
-	}
-
-	// 4. 将基础目录（已是绝对路径）和清理后的文件名安全地连接起来。
-	fullPath := filepath.Join(baseTemplateDir, cleanFilename)
-
-	// 5. 再次清理完整路径，确保最终路径是规范化的。
-	finalCleanPath := filepath.Clean(fullPath)
-
-	// 6. **核心安全检查**: 验证最终路径是否仍在 `baseTemplateDir` 的范围内。
-	// `filepath.Rel` 计算 `finalCleanPath` 相对于 `baseTemplateDir` 的相对路径。
-	// 如果 `finalCleanPath` 跳出了 `baseTemplateDir`，那么 `relPath` 会以 ".." 开头。
-	relPath, err := filepath.Rel(baseTemplateDir, finalCleanPath)
-	if err != nil {
-		// `filepath.Rel` 错误通常表示路径不兼容或发生异常，视为不安全。
-		return "", errors.New("路径处理错误: " + err.Error())
-	}
-	if strings.HasPrefix(relPath, "..") {
-		// 如果相对路径以 ".." 开头，说明存在目录遍历企图。
-		return "", errors.New("检测到目录遍历尝试")
-	}
-
-	// 7. 确保最终路径不是 `baseTemplateDir` 本身（例如，如果用户传入 "."）。
-	// 这防止了将根目录本身作为“文件”进行操作。
-	if finalCleanPath == baseTemplateDir {
-		return "", errors.New("文件名无效或指向根目录本身")
-	}
-
-	return finalCleanPath, nil
+	return tpl.SafeFilePath(filename)
 }
 
 func GetTempS(c *gin.Context) {
-	// 由于 init() 函数已经确保了 baseTemplateDir 的存在，这里无需再次检查和创建。
-	files, err := os.ReadDir(baseTemplateDir)
-	if err != nil {
-		log.Printf("读取模板目录失败: %v", err)
-		c.JSON(500, gin.H{ // 内部服务器错误
-			"msg": "服务器错误：无法读取模板文件",
-		})
-		return
-	}
-
-	var temps []Temp
-	for _, file := range files {
-		// 跳过目录，因为我们只处理文件
-		if file.IsDir() {
-			continue
-		}
-
-		// **修复点：对读取的文件名也使用 safeFilePath 进行验证**
-		// 这可以防止通过符号链接（symlink）进行的目录遍历，从而避免信息泄露。
-		fullPathToRead, err := safeFilePath(file.Name())
-		if err != nil {
-			log.Printf("跳过不安全或非法文件 (读取): %s, 错误: %v", file.Name(), err)
-			continue // 跳过不安全的文件
-		}
-
-		info, err := file.Info()
-		if err != nil {
-			log.Printf("获取文件信息失败: %s, 错误: %v", file.Name(), err)
-			continue
-		}
-		modTime := info.ModTime().Format("2006-01-02 15:04:05")
-
-		// 使用经过安全验证的完整路径来读取文件内容
-		text, err := os.ReadFile(fullPathToRead)
-		if err != nil {
-			log.Printf("读取文件内容失败: %s, 错误: %v", fullPathToRead, err)
-			continue // 跳过无法读取的文件
-		}
-
-		temp := Temp{
-			File:       file.Name(),
-			Text:       string(text),
-			CreateDate: modTime,
-		}
-		temps = append(temps, temp)
-	}
-
-	if len(temps) == 0 {
-		c.JSON(200, gin.H{
-			"code": "00000",
-			"data": []Temp{}, // 保持返回类型一致，即使为空也是 Temp 类型切片
-			"msg":  "ok",
-		})
-		return
+	temps := tpl.ListFiles()
+	if temps == nil {
+		temps = []tpl.Temp{}
 	}
 	c.JSON(200, gin.H{
 		"code": "00000",
@@ -256,16 +129,7 @@ func AddTemp(c *gin.Context) {
 		return
 	}
 
-	// 确保模板目录存在
-	if _, err := os.Stat(baseTemplateDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(baseTemplateDir, 0755); err != nil {
-			log.Println("创建模板目录失败:", err)
-			c.JSON(500, gin.H{
-				"msg": "服务器错误：无法创建模板目录",
-			})
-			return
-		}
-	}
+	// tpl 包 init 已确保模板目录存在，此处无需重复创建
 
 	// 获取安全的文件路径
 	fullPath, err := safeFilePath(filename)

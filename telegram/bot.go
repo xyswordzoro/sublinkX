@@ -65,6 +65,7 @@ var botCommands = []map[string]string{
 	{"command": "test", "description": "测试节点连通性"},
 	{"command": "del", "description": "删除节点"},
 	{"command": "sub", "description": "获取订阅链接"},
+	{"command": "rule", "description": "模板规则管理"},
 	{"command": "help", "description": "使用帮助"},
 }
 
@@ -276,6 +277,14 @@ func handleUpdate(token string, upd *tgUpdate) {
 		return
 	}
 	text := strings.TrimSpace(upd.Message.Text)
+	// 任意斜杠命令都会结束进行中的规则会话
+	if strings.HasPrefix(text, "/") {
+		ruleResetSession()
+	}
+	// 规则会话进行中时，普通文本作为规则内容处理
+	if ruleIntercept(token, chatID, text) {
+		return
+	}
 	switch {
 	case text == "/start" || text == "/help":
 		sendMessage(token, chatID, helpText(), nil)
@@ -289,6 +298,8 @@ func handleUpdate(token string, upd *tgUpdate) {
 		handleDel(token, chatID)
 	case text == "/sub" || text == "/link":
 		handleSub(token, chatID)
+	case strings.HasPrefix(text, "/rule"):
+		handleRule(token, chatID, strings.TrimSpace(strings.TrimPrefix(text, "/rule")))
 	case strings.HasPrefix(text, "/"):
 		sendMessage(token, chatID, "未知命令，发送 /help 查看用法。", nil)
 	}
@@ -300,7 +311,8 @@ func helpText() string {
 		"/list — 节点列表（点击查看详情）\n" +
 		"/test — 测试节点连通性\n" +
 		"/del — 删除节点（点击即删）\n" +
-		"/sub — 获取订阅链接"
+		"/sub — 获取订阅链接\n" +
+		"/rule — 模板规则管理（添加/删除规则）"
 }
 
 /* ---------------- /add ---------------- */
@@ -448,6 +460,10 @@ func handleList(token string, chatID int64) {
 }
 
 func handleCallback(token string, chatID int64, messageID int64, cbID, data string) {
+	// 规则管理回调（rtpl:/radd:/rview:/rdel:/rk:/rt:/rgo/rcancel/rfiles）
+	if strings.HasPrefix(data, "r") && ruleCallback(token, chatID, messageID, cbID, data) {
+		return
+	}
 	switch {
 	case strings.HasPrefix(data, "node:"):
 		idStr := strings.TrimPrefix(data, "node:")
