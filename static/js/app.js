@@ -1421,14 +1421,15 @@ function openAddRuleDlg() {
     '<option>mrs</option><option>text</option><option>yaml</option></select></label>' +
     '<label class="fl"><span>刷新间隔（秒）</span><input id="ar-pv-interval" class="input" type="number" value="86400"/></label>' +
     '</div></div>' +
-    '<p class="pick-hint">规则会追加到列表末尾（MATCH 类规则建议保持最后）。</p>',
+    '<p class="pick-hint">规则默认插入到列表最上面（MATCH 兜底规则会追加到末尾）。</p>',
     '添加', async function () {
       var kind = $('#ar-kind').value.trim().toUpperCase();
       var body = $('#ar-body').value.trim();
       var target = $('#ar-target').value;
       if (kind !== 'MATCH' && !body) throw new Error('内容不能为空');
       var rule = kind === 'MATCH' ? ('MATCH,' + target) : (kind + ',' + body + ',' + target);
-      t.rules.push(rule);
+      if (kind === 'MATCH') t.rules.push(rule); // MATCH 为兜底规则，必须保持在末尾
+      else t.rules.unshift(rule);
       if (kind === 'RULE-SET') {
         var pvUrl = $('#ar-pv-url').value.trim();
         if (pvUrl) {
