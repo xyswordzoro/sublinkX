@@ -16,6 +16,9 @@ import (
 	"sublink/telegram"
 	"sublink/utils"
 
+	// 内嵌时区数据库：alpine 镜像无 tzdata，TZ 环境变量才能生效
+	_ "time/tzdata"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -78,7 +81,7 @@ func main() {
 	var port = config.Port        // 读取端口号
 	// 获取版本号
 	var Isversion bool
-	version = "0.15"
+	version = "0.16"
 	flag.BoolVar(&Isversion, "version", false, "显示版本号")
 	flag.Parse()
 	if Isversion {

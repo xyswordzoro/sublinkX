@@ -9,7 +9,7 @@ RUN go build -o sublinkX
 FROM alpine:latest
 WORKDIR /app
 
-# 设置时区为 Asia/Shanghai
+# 设置时区为 Asia/Shanghai（二进制已内嵌 tzdata，无需在镜像中安装时区包）
 ENV TZ=Asia/Shanghai
 
 # 部分环境需要手动创建目录
