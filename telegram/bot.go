@@ -152,7 +152,8 @@ func maskTokenInErr(msg, token string) string {
 	return msg
 }
 
-func sendMessage(token string, chatID int64, text string, keyboard interface{}) {
+// sendMessage 发送消息，返回消息 ID（失败返回 0），供会话流程追踪清理
+func sendMessage(token string, chatID int64, text string, keyboard interface{}) int64 {
 	params := map[string]interface{}{
 		"chat_id":    chatID,
 		"text":       text,
@@ -161,8 +162,32 @@ func sendMessage(token string, chatID int64, text string, keyboard interface{}) 
 	if keyboard != nil {
 		params["reply_markup"] = keyboard
 	}
-	if _, err := callAPI(token, "sendMessage", params); err != nil {
+	result, err := callAPI(token, "sendMessage", params)
+	if err != nil {
 		log.Println("[telegram] sendMessage:", err)
+		return 0
+	}
+	if m, ok := result.(map[string]interface{}); ok {
+		switch id := m["message_id"].(type) {
+		case float64:
+			return int64(id)
+		case int64:
+			return id
+		}
+	}
+	return 0
+}
+
+// deleteMessage 删除消息（失败静默忽略，如消息已不存在）
+func deleteMessage(token string, chatID, messageID int64) {
+	if messageID <= 0 {
+		return
+	}
+	if _, err := callAPI(token, "deleteMessage", map[string]interface{}{
+		"chat_id":    chatID,
+		"message_id": messageID,
+	}); err != nil {
+		log.Println("[telegram] deleteMessage:", err)
 	}
 }
 

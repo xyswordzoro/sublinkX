@@ -18,6 +18,24 @@ type ruleSession struct {
 	Kind    string   // 规则类型
 	Target  string   // 目标策略
 	Targets []string // 目标选择列表（回调里用下标）
+	MsgAsk    int64 // 「请发送规则」提示消息
+	MsgKind   int64 // 「选择规则类型」消息
+	MsgTarget int64 // 「选择目标策略组」消息
+	MsgConfirm int64 // 确认卡片消息
+}
+
+// ruleCleanup 删除会话中所有中间提示消息（键盘随消息一起消失）
+func ruleCleanup(token string, chatID int64) {
+	ruleMu.Lock()
+	s := ruleSess
+	var ids []int64
+	if s != nil {
+		ids = []int64{s.MsgAsk, s.MsgKind, s.MsgTarget, s.MsgConfirm}
+	}
+	ruleMu.Unlock()
+	for _, id := range ids {
+		deleteMessage(token, chatID, id)
+	}
 }
 
 var (
@@ -118,11 +136,16 @@ func ruleAskBody(token string, chatID int64, messageID int64, file string) {
 	ruleSess = &ruleSession{Step: "add_body", File: file}
 	ruleMu.Unlock()
 	kb := inlineKeyboard([][]map[string]string{{kbButton("❌ 取消", "rcancel")}})
-	sendOrEdit(token, chatID, messageID,
+	msgID := sendMessage(token, chatID,
 		"➕ 向模板「"+file+"」添加规则\n\n请发送规则，两种写法：\n"+
 			"① 完整格式：DOMAIN,ads.example.com,REJECT\n"+
 			"② 简写：只发内容，如 ads.example.com\n\n"+
 			"新规则将插入到列表最上面（MATCH 兜底规则自动追加到末尾）。", kb)
+	ruleMu.Lock()
+	if ruleSess != nil {
+		ruleSess.MsgAsk = msgID
+	}
+	ruleMu.Unlock()
 }
 
 // ruleHandleBody 处理用户发送的规则内容
@@ -131,6 +154,7 @@ func ruleHandleBody(token string, chatID int64, s *ruleSession, text string) {
 	if text == "" {
 		return
 	}
+	deleteMessage(token, chatID, s.MsgAsk) // 清掉「请发送规则」提示
 	if strings.Contains(text, ",") {
 		parts := strings.Split(text, ",")
 		for i := range parts {
@@ -176,11 +200,15 @@ func ruleHandleBody(token string, chatID int64, s *ruleSession, text string) {
 		}
 	}
 	rows = append(rows, []map[string]string{kbButton("❌ 取消", "rcancel")})
-	sendMessage(token, chatID, "选择规则类型：", inlineKeyboard(rows))
+	msgID := sendMessage(token, chatID, "选择规则类型：", inlineKeyboard(rows))
+	ruleMu.Lock()
+	s.MsgKind = msgID
+	ruleMu.Unlock()
 }
 
 // ruleAskTarget 类型已定，展示目标策略选择
 func ruleAskTarget(token string, chatID int64, s *ruleSession) {
+	deleteMessage(token, chatID, s.MsgKind) // 清掉「选择规则类型」
 	res, err := tpl.ParseFile(s.File)
 	if err != nil {
 		sendMessage(token, chatID, "❌ "+err.Error(), nil)
@@ -206,12 +234,19 @@ func ruleAskTarget(token string, chatID int64, s *ruleSession) {
 		}
 	}
 	rows = append(rows, []map[string]string{kbButton("❌ 取消", "rcancel")})
-	sendMessage(token, chatID,
+	msgID := sendMessage(token, chatID,
 		fmt.Sprintf("规则类型 %s，内容 %s\n选择目标策略组：", s.Kind, s.Body), inlineKeyboard(rows))
+	ruleMu.Lock()
+	s.MsgTarget = msgID
+	ruleMu.Unlock()
 }
 
 // ruleConfirm 显示确认卡片
 func ruleConfirm(token string, chatID int64, s *ruleSession) {
+	deleteMessage(token, chatID, s.MsgTarget) // 清掉「选择目标策略组」
+	if s.Kind == "MATCH" {
+		deleteMessage(token, chatID, s.MsgKind) // 完整格式跳过了目标选择，清掉类型选择残留
+	}
 	ruleMu.Lock()
 	s.Step = "confirm"
 	ruleMu.Unlock()
@@ -228,8 +263,11 @@ func ruleConfirm(token string, chatID int64, s *ruleSession) {
 	kb := inlineKeyboard([][]map[string]string{
 		{kbButton("✅ 确认添加", "rgo"), kbButton("❌ 取消", "rcancel")},
 	})
-	sendMessage(token, chatID,
+	msgID := sendMessage(token, chatID,
 		"📝 确认规则：\n<code>"+htmlEscape(rule)+"</code>\n\n"+pos+"\n目标模板："+s.File, kb)
+	ruleMu.Lock()
+	s.MsgConfirm = msgID
+	ruleMu.Unlock()
 }
 
 // ruleSave 确认写入模板
@@ -258,10 +296,13 @@ func ruleSave(token string, chatID int64) {
 		sendMessage(token, chatID, "❌ 保存失败："+err.Error(), nil)
 		return
 	}
+	file := s.File
+	total := len(res.Rules)
+	ruleCleanup(token, chatID) // 清掉确认卡片等中间消息
 	ruleResetSession()
 	sendMessage(token, chatID,
 		fmt.Sprintf("✅ 已添加规则\n<code>%s</code>\n\n模板「%s」现有 %d 条规则，订阅将即时生效。",
-			htmlEscape(rule), s.File, len(res.Rules)), nil)
+			htmlEscape(rule), file, total), nil)
 }
 
 /* ---------------- 查看 / 删除规则 ---------------- */
@@ -365,6 +406,7 @@ func ruleCallback(token string, chatID int64, messageID int64, cbID, data string
 		idx, _ := strconv.Atoi(payload[:i])
 		ruleDelete(token, chatID, messageID, cbID, payload[i+1:], idx)
 	case data == "rcancel":
+		ruleCleanup(token, chatID) // 清掉所有中间提示消息
 		ruleResetSession()
 		sendMessage(token, chatID, "已取消。发送 /rule 重新开始。", nil)
 		answerCallback(token, cbID, "已取消")
