@@ -48,8 +48,8 @@ func Start(token string) {
 	}
 	// 重建 HTTP 客户端以应用代理配置
 	httpClient = buildClient()
-	// 注册命令菜单（Telegram 输入框上方/斜杠提示）
-	registerCommands(token)
+	// 注册命令菜单放后台执行，避免网络抖动阻塞轮询启动
+	go registerCommands(token)
 	stopMutex.Lock()
 	stopCh = make(chan struct{})
 	ch := stopCh
@@ -227,6 +227,8 @@ func kbButton(text, data string) map[string]string {
 /* ---------------- 长轮询 ---------------- */
 
 func pollLoop(token string, stop chan struct{}) {
+	fails := 0
+	lastErr := ""
 	for {
 		select {
 		case <-stop:
@@ -234,18 +236,34 @@ func pollLoop(token string, stop chan struct{}) {
 		default:
 		}
 		params := map[string]interface{}{
-			"timeout":         25,
+			// 长轮询超时取较短值：部分代理会掐断长时间静默连接，
+			// 5 秒既能降低空转开销，也能避免连接被中途断开。
+			"timeout":         5,
 			"offset":          offset + 1,
 			"allowed_updates": []string{"message", "callback_query"},
 		}
 		result, err := callAPI(token, "getUpdates", params)
 		if err != nil {
+			fails++
+			// 首次失败与每 20 次失败记录一次，避免日志刷屏
+			if fails == 1 || fails%20 == 0 {
+				msg := maskTokenInErr(err.Error(), token)
+				if msg != lastErr || fails == 1 {
+					log.Printf("[telegram] 轮询失败（第 %d 次）: %s", fails, msg)
+					lastErr = msg
+				}
+			}
 			select {
 			case <-stop:
 				return
 			case <-time.After(3 * time.Second):
 			}
 			continue
+		}
+		if fails > 0 {
+			log.Printf("[telegram] 轮询已恢复正常（此前失败 %d 次）", fails)
+			fails = 0
+			lastErr = ""
 		}
 		updates, ok := result.([]interface{})
 		if !ok {
@@ -327,6 +345,9 @@ func handleUpdate(token string, upd *tgUpdate) {
 		handleRule(token, chatID, strings.TrimSpace(strings.TrimPrefix(text, "/rule")))
 	case strings.HasPrefix(text, "/"):
 		sendMessage(token, chatID, "未知命令，发送 /help 查看用法。", nil)
+	case strings.Contains(text, "://"):
+		// 直接发送节点/订阅链接（未加 /add）时自动按添加处理
+		handleAdd(token, chatID, "/add "+text)
 	}
 }
 
@@ -337,7 +358,8 @@ func helpText() string {
 		"/test — 测试节点连通性\n" +
 		"/del — 删除节点（点击即删）\n" +
 		"/sub — 获取订阅链接\n" +
-		"/rule — 模板规则管理（添加/删除规则）"
+		"/rule — 模板规则管理（添加/删除规则）\n\n" +
+		"💡 也可以直接发送节点链接或订阅链接（无需命令）"
 }
 
 /* ---------------- /add ---------------- */
@@ -345,40 +367,69 @@ func helpText() string {
 func handleAdd(token string, chatID int64, text string) {
 	arg := strings.TrimSpace(strings.TrimPrefix(text, "/add"))
 	if arg == "" {
-		sendMessage(token, chatID, "用法：/add 节点链接\n例如：/add anytls://password@host:443?sni=host#名称", nil)
+		sendMessage(token, chatID,
+			"用法：\n/add 节点链接\n/add 订阅链接\n\n"+
+				"也支持直接发送链接（无需 /add）。\n"+
+				"示例：/add anytls://password@host:443?sni=host#名称\n"+
+				"　　　/add https://example.com/c/?token=xxx", nil)
 		return
 	}
-	// 支持一次发送多条链接（逗号或换行分隔）
-	links := strings.FieldsFunc(arg, func(r rune) bool { return r == ',' || r == '\n' })
+	// 支持一次发送多条（逗号或换行分隔），订阅链接会展开为多个节点
+	items := strings.FieldsFunc(arg, func(r rune) bool { return r == ',' || r == '\n' })
 	var sb strings.Builder
-	for _, link := range links {
-		link = strings.TrimSpace(link)
-		if link == "" || !strings.Contains(link, "://") {
+	total := 0
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" || !strings.Contains(item, "://") {
 			continue
 		}
-		name, err := resolveNodeName(link)
-		if err != nil {
-			sb.WriteString("❌ 解析失败：" + short(link) + "\n" + err.Error() + "\n\n")
+		if isSubURL(item) {
+			sendMessage(token, chatID, "⏳ 正在拉取订阅…", nil)
+			links, err := fetchSubscription(item)
+			if err != nil {
+				sb.WriteString("❌ 订阅导入失败：" + short(item) + "\n" + err.Error() + "\n\n")
+				continue
+			}
+			sb.WriteString(fmt.Sprintf("📥 订阅解析出 %d 个节点\n\n", len(links)))
+			for _, link := range links {
+				sb.WriteString(addOneNode(link))
+				total++
+			}
 			continue
 		}
-		n := &models.Node{Name: name, Link: link}
-		added, err := n.AddOrReplace()
-		if err != nil {
-			sb.WriteString("❌ 保存失败：" + name + "\n" + err.Error() + "\n\n")
-			continue
-		}
-		if added {
-			sb.WriteString("✅ 已添加节点：" + name + "\n\n")
-		} else {
-			sb.WriteString("🔄 已替换节点：" + name + "\n\n")
-		}
+		sb.WriteString(addOneNode(item))
+		total++
 	}
 	if sb.Len() == 0 {
-		sendMessage(token, chatID, "未识别到有效的节点链接。", nil)
+		sendMessage(token, chatID, "未识别到有效的节点链接或订阅链接。", nil)
 		return
 	}
-	models.OpLogAdd("Telegram", "添加节点", short(strings.TrimSpace(strings.TrimPrefix(text, "/add"))))
-	sendMessage(token, chatID, strings.TrimRight(sb.String(), "\n"), nil)
+	if total > 0 {
+		models.OpLogAdd("Telegram", "添加节点", fmt.Sprintf("共 %d 个，来源：%s", total, short(arg)))
+	}
+	out := strings.TrimRight(sb.String(), "\n")
+	// Telegram 单条消息上限 4096 字符，超长截断提示
+	if len([]rune(out)) > 3500 {
+		out = string([]rune(out)[:3500]) + "\n\n…（内容过长已截断）"
+	}
+	sendMessage(token, chatID, out, nil)
+}
+
+// addOneNode 添加单个分享链接，返回结果文案
+func addOneNode(link string) string {
+	name, err := resolveNodeName(link)
+	if err != nil {
+		return "❌ 解析失败：" + short(link) + "\n" + err.Error() + "\n\n"
+	}
+	n := &models.Node{Name: name, Link: link}
+	added, err := n.AddOrReplace()
+	if err != nil {
+		return "❌ 保存失败：" + name + "\n" + err.Error() + "\n\n"
+	}
+	if added {
+		return "✅ 已添加节点：" + name + "\n\n"
+	}
+	return "🔄 已替换节点：" + name + "\n\n"
 }
 
 // resolveNodeName 复用后端各协议解码器提取节点名
