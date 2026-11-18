@@ -23,6 +23,7 @@ var (
 	offset     int64
 	stopCh     chan struct{}
 	stopMutex  sync.Mutex
+	clientMu   sync.Mutex // 保护 httpClient（代理重建时会并发替换）
 	httpClient = &http.Client{Timeout: 40 * time.Second}
 	dialTimeo  = 3 * time.Second
 )
@@ -47,7 +48,9 @@ func Start(token string) {
 		return
 	}
 	// 重建 HTTP 客户端以应用代理配置
+	clientMu.Lock()
 	httpClient = buildClient()
+	clientMu.Unlock()
 	// 注册命令菜单放后台执行，避免网络抖动阻塞轮询启动
 	go registerCommands(token)
 	stopMutex.Lock()
@@ -124,24 +127,74 @@ func callAPI(token, method string, params interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", apiBase+token+"/"+method, strings.NewReader(string(body)))
-	if err != nil {
-		return nil, fmt.Errorf("%s 请求构造失败: %s", method, maskTokenInErr(err.Error(), token))
+	do := func(c *http.Client) (interface{}, error) {
+		req, err := http.NewRequest("POST", apiBase+token+"/"+method, strings.NewReader(string(body)))
+		if err != nil {
+			return nil, fmt.Errorf("%s 请求构造失败: %s", method, maskTokenInErr(err.Error(), token))
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := c.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("%s 请求失败: %s", method, maskTokenInErr(err.Error(), token))
+		}
+		defer resp.Body.Close()
+		var tr tgResponse
+		if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+			return nil, err
+		}
+		if !tr.OK {
+			return nil, fmt.Errorf("telegram api %s: %s", method, tr.Description)
+		}
+		return tr.Result, nil
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%s 请求失败: %s", method, maskTokenInErr(err.Error(), token))
+
+	clientMu.Lock()
+	c := httpClient
+	clientMu.Unlock()
+
+	result, err := do(c)
+	if err == nil {
+		return result, nil
 	}
-	defer resp.Body.Close()
-	var tr tgResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
-		return nil, err
+	// 连接层失败（多为代理重启/连接池失效）：重建客户端后重试一次。
+	// 代理异常不会返回错误体，这类失败若不复建客户端会一直沿用坏连接。
+	if isTransportErr(err) && clientRebuildDue() {
+		clientMu.Lock()
+		if tr, ok := c.Transport.(*http.Transport); ok {
+			tr.CloseIdleConnections() // 释放旧连接，避免长期失败时堆积
+		}
+		httpClient = buildClient()
+		c = httpClient
+		lastRebuild = time.Now()
+		clientMu.Unlock()
+		if result2, err2 := do(c); err2 == nil {
+			return result2, nil
+		}
 	}
-	if !tr.OK {
-		return nil, fmt.Errorf("telegram api %s: %s", method, tr.Description)
+	return nil, err
+}
+
+var lastRebuild time.Time
+
+// clientRebuildDue 限制重建频率（10 秒内不重复重建），避免失败风暴时频繁建连
+func clientRebuildDue() bool {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	return time.Since(lastRebuild) > 10*time.Second
+}
+
+// isTransportErr 判断是否为连接层错误（可安全重试）
+func isTransportErr(err error) bool {
+	if err == nil {
+		return false
 	}
-	return tr.Result, nil
+	msg := err.Error()
+	for _, key := range []string{"请求失败", "connection", "EOF", "timeout", "reset", "refused", "proxyconnect"} {
+		if strings.Contains(strings.ToLower(msg), strings.ToLower(key)) {
+			return true
+		}
+	}
+	return false
 }
 
 // maskTokenInErr 从错误信息中抹掉 bot token，避免日志泄露
