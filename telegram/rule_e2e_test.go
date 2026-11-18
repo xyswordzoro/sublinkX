@@ -23,9 +23,11 @@ func msgUpdate(id int64, text string) *tgUpdate {
 			ID int64 `json:"id"`
 		} `json:"chat"`
 		Text string `json:"text"`
+		Date int64  `json:"date"`
 	}{}
 	upd.Message.Chat.ID = chatID
 	upd.Message.Text = text
+	upd.Message.Date = time.Now().Unix()
 	return upd
 }
 
@@ -40,12 +42,14 @@ func cbUpdate(id int64, data string) *tgUpdate {
 				ID int64 `json:"id"`
 			} `json:"chat"`
 			MessageID int64 `json:"message_id"`
+			Date      int64 `json:"date"`
 		} `json:"message"`
 	}{}
 	upd.CallbackQuery.ID = "cb" + time.Now().Format("150405.000000000")
 	upd.CallbackQuery.Data = data
 	upd.CallbackQuery.Message.Chat.ID = chatID
 	upd.CallbackQuery.Message.MessageID = 100 + id
+	upd.CallbackQuery.Message.Date = time.Now().Unix()
 	return upd
 }
 

@@ -26,7 +26,33 @@ var (
 	clientMu   sync.Mutex // 保护 httpClient（代理重建时会并发替换）
 	httpClient = &http.Client{Timeout: 40 * time.Second}
 	dialTimeo  = 3 * time.Second
+
+	seenMu  sync.Mutex
+	seenIDs = map[int64]bool{} // 已处理的 update_id，防止重复回复
 )
+
+// maxUpdateAge 超过此时间的历史消息不再回复（切换 bot / 长时间停机后避免旧消息刷屏）
+const maxUpdateAge = 30 * time.Minute
+
+// markSeen 记录 update_id；首次出现返回 true
+func markSeen(id int64) bool {
+	seenMu.Lock()
+	defer seenMu.Unlock()
+	if seenIDs[id] {
+		return false
+	}
+	seenIDs[id] = true
+	if len(seenIDs) > 2000 { // 简单防止无限增长
+		seenIDs = map[int64]bool{id: true}
+	}
+	return true
+}
+
+func resetSeen() {
+	seenMu.Lock()
+	seenIDs = map[int64]bool{}
+	seenMu.Unlock()
+}
 
 // buildClient 按配置中的代理地址构建 HTTP 客户端（支持 http/socks5 代理）
 func buildClient() *http.Client {
@@ -47,6 +73,10 @@ func Start(token string) {
 	if token == "" {
 		return
 	}
+	// 切换 bot 后 update_id 序列完全变了，必须重置本地 offset：
+	// 否则旧 token 的序号会让新 bot 的 getUpdates 直接"跳过"全部消息（表现为 bot 不响应）。
+	offset = 0
+	resetSeen()
 	// 重建 HTTP 客户端以应用代理配置
 	clientMu.Lock()
 	httpClient = buildClient()
@@ -103,17 +133,31 @@ type tgUpdate struct {
 			ID int64 `json:"id"`
 		} `json:"chat"`
 		Text string `json:"text"`
+		Date int64  `json:"date"`
 	} `json:"message"`
 	CallbackQuery *struct {
 		ID   string `json:"id"`
 		Data string `json:"data"`
+		// 回调消息自带 date；回调本身没有独立时间戳，用消息时间近似
 		Message struct {
 			Chat struct {
 				ID int64 `json:"id"`
 			} `json:"chat"`
 			MessageID int64 `json:"message_id"`
+			Date      int64 `json:"date"`
 		} `json:"message"`
 	} `json:"callback_query"`
+}
+
+// updateDate 取更新的时间戳（秒）
+func updateDate(upd *tgUpdate) int64 {
+	if upd.Message != nil {
+		return upd.Message.Date
+	}
+	if upd.CallbackQuery != nil {
+		return upd.CallbackQuery.Message.Date
+	}
+	return 0
 }
 
 type tgResponse struct {
@@ -306,10 +350,15 @@ func pollLoop(token string, stop chan struct{}) {
 					lastErr = msg
 				}
 			}
+			// 同一 token 被多个实例轮询会持续 409，退避更久，避免请求风暴
+			wait := 3 * time.Second
+			if strings.Contains(err.Error(), "Conflict") {
+				wait = 15 * time.Second
+			}
 			select {
 			case <-stop:
 				return
-			case <-time.After(3 * time.Second):
+			case <-time.After(wait):
 			}
 			continue
 		}
@@ -335,6 +384,16 @@ func pollLoop(token string, stop chan struct{}) {
 			case <-stop:
 				return
 			default:
+			}
+			// 去重：同一 update 只处理一次（重启/切换 token 后避免重复回复）
+			if !markSeen(upd.UpdateID) {
+				continue
+			}
+			// 过旧的历史消息直接丢弃，避免切换 bot 后把积压旧消息全部回复造成刷屏
+			if d := updateDate(&upd); d > 0 && time.Since(time.Unix(d, 0)) > maxUpdateAge {
+				log.Printf("[telegram] 跳过 %s 前的旧消息（update %d）",
+					time.Unix(d, 0).Format("01-02 15:04"), upd.UpdateID)
+				continue
 			}
 			handleUpdate(token, &upd)
 		}
