@@ -61,6 +61,12 @@ func TestParseSaveRoundTrip(t *testing.T) {
 	if !strings.Contains(text, "hidden: true") {
 		t.Fatal("未识别字段丢失")
 	}
+	if strings.Contains(text, `\U`) || strings.Contains(text, `\u`) || strings.Contains(text, `\x`) {
+		t.Fatal("非 ASCII 字符被转义，应保持字面 UTF-8")
+	}
+	if !strings.Contains(text, "测试组") {
+		t.Fatal("中文策略组名丢失")
+	}
 	res2, err := ParseFile(testTplName)
 	if err != nil {
 		t.Fatal(err)

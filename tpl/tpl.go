@@ -9,7 +9,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"sublink/models"
@@ -521,10 +523,38 @@ func SaveStruct(name string, groups []TplGroup, rules []string, providers []TplP
 	}
 	enc.Close()
 
-	if err := os.WriteFile(path, []byte(buf.String()), 0666); err != nil {
+	out := unescapeYamlUnicode(buf.String())
+	if err := os.WriteFile(path, []byte(out), 0666); err != nil {
 		log.Println("写入模板失败:", err)
 		return errors.New("保存失败")
 	}
 	models.OpLogAdd(source, "编辑模板规则", name)
 	return nil
+}
+
+// yamlUnicodeRe 匹配 yaml.v3 双引号标量里的 \UXXXX / \uXXXX / \xXX 转义
+var yamlUnicodeRe = regexp.MustCompile(`\\U([0-9A-Fa-f]{8})|\\u([0-9A-Fa-f]{4})|\\x([0-9A-Fa-f]{2})`)
+
+// unescapeYamlUnicode yaml.v3 发射器默认不启用 unicode，非 ASCII 字符会被转成
+// \U 转义（如 emoji 变 \U0001F680）。此函数把它们还原为字面 UTF-8，保持模板可读。
+// 模板内容不会合法出现字面 "\U" 序列，因此全文替换是安全的。
+func unescapeYamlUnicode(s string) string {
+	if !strings.Contains(s, `\U`) && !strings.Contains(s, `\u`) && !strings.Contains(s, `\x`) {
+		return s
+	}
+	return yamlUnicodeRe.ReplaceAllStringFunc(s, func(m string) string {
+		var code int64
+		switch {
+		case strings.HasPrefix(m, `\U`):
+			code, _ = strconv.ParseInt(m[2:], 16, 32)
+		case strings.HasPrefix(m, `\u`):
+			code, _ = strconv.ParseInt(m[2:], 16, 16)
+		default:
+			code, _ = strconv.ParseInt(m[2:], 16, 8) // \xXX：0x00-0xFF 单字节码点
+		}
+		if code <= 0 {
+			return m
+		}
+		return string(rune(code))
+	})
 }

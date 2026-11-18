@@ -30,8 +30,9 @@ func ruleCleanup(token string, chatID int64) {
 	s := ruleSess
 	var ids []int64
 	if s != nil {
-		ids = []int64{s.MsgAsk, s.MsgKind, s.MsgTarget, s.MsgConfirm}
+		ids = []int64{s.MsgAsk, s.MsgKind, s.MsgTarget, s.MsgConfirm, ruleMenuMsg, ruleViewMsg}
 	}
+	ruleMenuMsg, ruleViewMsg = 0, 0
 	ruleMu.Unlock()
 	for _, id := range ids {
 		deleteMessage(token, chatID, id)
@@ -71,6 +72,7 @@ func ruleIntercept(token string, chatID int64, text string) bool {
 // handleRule /rule [模板名] — 模板规则管理
 func handleRule(token string, chatID int64, arg string) {
 	ruleResetSession()
+	ruleDelStaleMenu(token, chatID) // 清掉上一轮残留的菜单/列表
 	if arg != "" {
 		for _, t := range tpl.ListFiles() {
 			if t.File == arg {
@@ -98,8 +100,14 @@ func renderRuleFiles(token string, chatID int64, messageID int64) {
 			row = nil
 		}
 	}
-	sendOrEdit(token, chatID, messageID,
-		fmt.Sprintf("🗂 选择要管理规则的模板（共 %d 个）：", len(files)), inlineKeyboard(rows))
+	text := fmt.Sprintf("🗂 选择要管理规则的模板（共 %d 个）：", len(files))
+	if messageID > 0 {
+		editMessage(token, chatID, messageID, text, inlineKeyboard(rows))
+		return
+	}
+	ruleMu.Lock()
+	ruleMenuMsg = sendMessage(token, chatID, text, inlineKeyboard(rows))
+	ruleMu.Unlock()
 }
 
 func sendOrEdit(token string, chatID int64, messageID int64, text string, kb map[string]interface{}) {
@@ -108,6 +116,21 @@ func sendOrEdit(token string, chatID int64, messageID int64, text string, kb map
 	} else {
 		sendMessage(token, chatID, text, kb)
 	}
+}
+
+var (
+	ruleMenuMsg int64 // 「选择模板 / 模板菜单」消息 ID
+	ruleViewMsg int64 // 「查看规则」列表消息 ID
+)
+
+// ruleDelStaleMenu 删除残留的模板菜单 / 规则列表消息（开始新流程时调用）
+func ruleDelStaleMenu(token string, chatID int64) {
+	ruleMu.Lock()
+	menu, view := ruleMenuMsg, ruleViewMsg
+	ruleMenuMsg, ruleViewMsg = 0, 0
+	ruleMu.Unlock()
+	deleteMessage(token, chatID, menu)
+	deleteMessage(token, chatID, view)
 }
 
 func renderRuleMenu(token string, chatID int64, messageID int64, file string) {
@@ -126,12 +149,20 @@ func renderRuleMenu(token string, chatID int64, messageID int64, file string) {
 		{kbButton("➕ 添加规则", "radd:"+file), kbButton("📋 查看规则", "rview:"+file)},
 		{kbButton("🔙 重新选择模板", "rfiles")},
 	})
-	sendOrEdit(token, chatID, messageID, text, kb)
+	if messageID > 0 {
+		// 编辑原「选择模板」消息，ID 不变
+		editMessage(token, chatID, messageID, text, kb)
+		return
+	}
+	ruleMu.Lock()
+	ruleMenuMsg = sendMessage(token, chatID, text, kb)
+	ruleMu.Unlock()
 }
 
 /* ---------------- 添加规则 ---------------- */
 
 func ruleAskBody(token string, chatID int64, messageID int64, file string) {
+	ruleDelStaleMenu(token, chatID) // 进入添加流程，清掉模板菜单与旧列表
 	ruleMu.Lock()
 	ruleSess = &ruleSession{Step: "add_body", File: file}
 	ruleMu.Unlock()
@@ -344,8 +375,22 @@ func renderRuleView(token string, chatID int64, messageID int64, file string) {
 	if len(res.Rules) > ruleViewCount {
 		note = fmt.Sprintf("\n\n仅显示前 %d 条（共 %d 条），更多请在面板查看。", ruleViewCount, len(res.Rules))
 	}
-	sendOrEdit(token, chatID, messageID,
-		fmt.Sprintf("📋 模板「%s」规则：\n\n%s%s", file, sb.String(), note), inlineKeyboard(rows))
+	text := fmt.Sprintf("📋 模板「%s」规则：\n\n%s%s", file, sb.String(), note)
+	if messageID > 0 {
+		// 回调路径：删除旧列表并发新消息（按钮变化，编辑同一消息易与其他流程冲突）
+		ruleMu.Lock()
+		old := ruleViewMsg
+		if old != messageID {
+			deleteMessage(token, chatID, old)
+		}
+		ruleViewMsg = sendMessage(token, chatID, text, inlineKeyboard(rows))
+		ruleMu.Unlock()
+		return
+	}
+	ruleMu.Lock()
+	deleteMessage(token, chatID, ruleViewMsg)
+	ruleViewMsg = sendMessage(token, chatID, text, inlineKeyboard(rows))
+	ruleMu.Unlock()
 }
 
 func isMatchRule(rule string) bool {
@@ -388,13 +433,33 @@ func ruleCallback(token string, chatID int64, messageID int64, cbID, data string
 		answerCallback(token, cbID, "")
 	case strings.HasPrefix(data, "rtpl:"):
 		ruleResetSession()
-		renderRuleMenu(token, chatID, messageID, strings.TrimPrefix(data, "rtpl:"))
+		file := strings.TrimPrefix(data, "rtpl:")
+		// 从「查看规则」返回：删除列表消息，重发新菜单；否则原地编辑菜单
+		ruleMu.Lock()
+		isView := messageID == ruleViewMsg
+		if isView {
+			ruleViewMsg = 0
+		}
+		ruleMu.Unlock()
+		if isView {
+			deleteMessage(token, chatID, messageID)
+			renderRuleMenu(token, chatID, 0, file)
+		} else {
+			renderRuleMenu(token, chatID, messageID, file)
+		}
 		answerCallback(token, cbID, "")
 	case strings.HasPrefix(data, "radd:"):
 		ruleAskBody(token, chatID, messageID, strings.TrimPrefix(data, "radd:"))
 		answerCallback(token, cbID, "")
 	case strings.HasPrefix(data, "rview:"):
-		renderRuleView(token, chatID, messageID, strings.TrimPrefix(data, "rview:"))
+		// 菜单消息被规则列表取代，避免两者同时驻留
+		ruleMu.Lock()
+		if ruleMenuMsg == messageID {
+			ruleMenuMsg = 0
+		}
+		ruleMu.Unlock()
+		deleteMessage(token, chatID, messageID)
+		renderRuleView(token, chatID, 0, strings.TrimPrefix(data, "rview:"))
 		answerCallback(token, cbID, "")
 	case strings.HasPrefix(data, "rdel:"):
 		payload := strings.TrimPrefix(data, "rdel:")
@@ -404,6 +469,13 @@ func ruleCallback(token string, chatID int64, messageID int64, cbID, data string
 			return true
 		}
 		idx, _ := strconv.Atoi(payload[:i])
+		// 旧列表的按钮序号已失效，删除宿主消息后重发新列表
+		deleteMessage(token, chatID, messageID)
+		ruleMu.Lock()
+		if ruleViewMsg == messageID {
+			ruleViewMsg = 0
+		}
+		ruleMu.Unlock()
 		ruleDelete(token, chatID, messageID, cbID, payload[i+1:], idx)
 	case data == "rcancel":
 		ruleCleanup(token, chatID) // 清掉所有中间提示消息
